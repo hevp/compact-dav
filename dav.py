@@ -140,11 +140,11 @@ class WebDAVClient(object):
         self.cache = []
         self.options = options
 
-        # read API definition
+        # load API definition
         try:
             with open("webdav.json", "r") as f:
                 text = f.read()
-                self.api = simplejson.loads(text)
+            self.api = simplejson.loads(text)
 
             # post-process API definition
             for o, ov in self.api.items():
@@ -157,20 +157,30 @@ class WebDAVClient(object):
                 if not "arguments" in ov:
                     ov["arguments"] = {"min": 1, "max": 1}
 
+                # operation definition completeness test
+                required = ['method', 'description']
+                missing = set(required).difference(set(ov.keys()))
+                if len(missing) > 0:
+                    error('missing definition elements for operation \'%s\': \'%s\'' % (o, "\', \'".join(missing)), 1)
+
         except Exception as e:
             error(e, 1)
 
     def credentials(self, filename):
-        if not os.path.exists(filename):
-            return error("credentials loading: file %s not found" % filename)
+        try:
+            with open(os.path.abspath(filename), "r") as f:
+                text = f.read()
+            self.credentials = json.loads(text)
+        except Exception as e:
+            error("credentials loading failed: %s" % e, 1)
 
         debug("credentials file \'%s\'" % filename)
 
-        try:
-            creds = open(os.path.abspath(filename)).read()
-            self.credentials = json.loads(creds)
-        except Exception as e:
-            error("credentials loading failed: %s" % e, 1)
+        # credentials completeness test
+        required = ['hostname', 'endpoint', 'user', 'token']
+        missing = set(required).difference(set(self.credentials.keys()))
+        if len(missing) > 0:
+            error('missing credential elements: %s' % ", ".join(missing), 1)
 
         return True
 
@@ -178,7 +188,7 @@ class WebDAVClient(object):
         # check if valid action
         if action not in self.api.keys():
             error("unknown action \'%s\'" % action, 1)
-        elif "arguments" in self.api[action] and "min" in self.api[action]["arguments"] and "max" in self.api[action]["arguments"]:
+        elif "min" in self.api[action]["arguments"] and "max" in self.api[action]["arguments"]:
             if len(args) < self.api[action]["arguments"]["min"] or len(args) > self.api[action]["arguments"]["max"]:
                 error("incorrect number of arguments", 1)
             # fill missing with None
@@ -430,30 +440,24 @@ class WebDAVClient(object):
 
             r = copy.deepcopy(l)
 
-            # determine all variables
+            # determine all found variables
             for var in m:
-                val = ""
-                g = var[0]
-
-                # if variable exists
-                if g in r:
-                    val = r[g]
+                # if found variable exists
+                if var[0] in r:
+                    # get the original value
+                    val = r[var[0]]
                     # special treatment per variable
-                    if g == "path":
-                        val = self.getRelativePath(r, g)
-                    elif g == "date":
+                    if var[0] == "path":
+                        val = self.getRelativePath(r, var[0])
+                    elif var[0] == "date":
                         val = dateparse(val).strftime("%Y-%m-%d %H:%M:%S")
-                    elif g == "size":
+                    elif var[0] == "size":
                         val = self.makeHuman(val)
                 else:
                     val = "<error>"
 
-                # sanity check
-                if not val:
-                    val = ""
-
-                # update temporary result array
-                r[g] = val
+                # update temporary result array with sanity check
+                r[var[0]] = val if val else ""
 
             results.append(r)
 
@@ -559,15 +563,19 @@ def main(argv):
     quickopts = {"headers": "", "head": "", "no-parse": "", "recursive": "R", "sort": "", "reverse": "r",
                  "dirs-first": "t", "files-only": "f", "dirs-only": "d", "summary": "u", "verbose": "v", "no-verify": "k", "debug": "", "dry-run": "n", "human": "h", "yes": "y",
                  "quiet": "q", "no-colors": "", "empty": "e", "credentials=": "c:", "printf=": "p:", "help": "", "version": ""}
-    quickoptsa = list(filter(lambda x: x > "", quickopts.values()))
+
+    # remove = and : in options
+    quickoptsm = dict((k.replace('=',''), v.replace(':','')) for k,v in quickopts.items())
 
     # assign values to quick options
-    common.defaults = {**common.defaults, **{k: False for k in quickopts.keys() if k.replace('=', '') not in common.defaults}}
+    common.defaults = {**common.defaults, **{k: False for k in quickoptsm.keys() if k not in common.defaults}}
     common.options = copy.deepcopy(common.defaults)
 
     # handle arguments
     try:
-        opts, args = getopt.gnu_getopt(argv, "".join(quickoptsa), list(quickopts.keys()))
+        opts, args = getopt.gnu_getopt(argv,
+                                       "".join(list(filter(lambda x: x > "", quickopts.values()))),
+                                       list(quickopts.keys()))
     except getopt.GetoptError as e:
         error(e, 1)
 
@@ -577,23 +585,20 @@ def main(argv):
     # set operation
     operation = args[0] if len(args) > 0 else ""
 
-    # remove = and : in options
-    quickoptsm = list(map(lambda x: x.replace('=',''), quickopts))
-    quickoptsam = list(map(lambda x: x.replace(':',''), quickoptsa))
-
     # parse options and arguments
     for opt, arg in opts:
-        if opt in ["--help"]:
-            help(wd, operation, quickopts, common.defaults)
-            sys.exit(0)
-        elif opt[2:] in quickoptsm:
+        if opt[2:] in quickoptsm.keys():
             common.options[opt[2:]] = arg if arg > "" else True
-        elif opt[1:] in quickoptsam:
-            index = [k for k,v in quickopts.items() if v == opt[1:]][0]
+        elif opt[1:] in quickoptsm.values():
+            index = [k for k,v in quickoptsm.items() if v == opt[1:]][0]
             common.options[index] = arg if arg > "" else True
-        elif opt == "--version":
-            print("%s %s" % (TITLE, VERSION))
-            sys.exit(0)
+
+    if common.options['help']:
+        help(wd, operation, quickopts, common.defaults)
+        sys.exit(0)
+    elif common.options['version']:
+        print("%s %s" % (TITLE, VERSION))
+        sys.exit(0)
 
     # check operation
     if operation == "":
