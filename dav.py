@@ -34,6 +34,8 @@ class ChunkedFile(object):
 
 
 class DAVRequest(object):
+    """ WebDAV request class for WebDAV-enabled servers """
+
     SUCCESS = [200, 201, 204, 207]
 
     def __init__(self, credentials, opts={}):
@@ -129,8 +131,7 @@ class DAVAuthRequest(DAVRequest):
 
 
 class WebDAVClient(object):
-    """ WebDAV client object to handle simple requests to a WebDAV-enabled server
-    """
+    """ WebDAV client class to set up requests for WebDAV-enabled servers """
 
     def __init__(self, options):
         self.args = {}
@@ -398,11 +399,12 @@ class WebDAVClient(object):
         return results
 
     def getRelativePath(self, r, var):
-        val = r[var]
-
-        val = val.replace(self.credentials["endpoint"], "")
+        # remove endpoint, root folder and unquote
+        val = r[var].replace(self.credentials["endpoint"], "")
         val = val.replace(self.options["root"], "", 1)
         val = urllib.parse.unquote(val)
+
+        # add leading slash
         sp = val.split('/')
         if r['type'] == 'd':
             val = "/" + sp[-2]
@@ -470,8 +472,7 @@ class WebDAVClient(object):
 
             # determine all variables
             for var in m:
-                g = var[0]
-                val = r[g]
+                val = r[var[0]]
 
                 # justification
                 if var[1] > '':
@@ -527,20 +528,25 @@ def help(wd, operation, options, defaults):
         # print options
         print("\nOptions:")
         for k, v in options.items():
+            k = k.replace('=', '')
+            v = v.replace(':', '')
             print(("--%-" + maxop + "s %-2s  %s %s") % (k.replace("=", ""),
-                                                             "-%s" % v if v > "" else "",
-                                                             ("Enable %-" + maxop + "s") % k if k in defaults.keys() else "",
-                                                             "(default: %s)" % defaults[k] if k in defaults.keys() else ""))
+                                                        "-%s" % v if v > "" else "",
+                                                        ("Enable %-" + maxop + "s") % k if k in defaults.keys() else " " * (int(maxop) + 7),
+                                                        "(default: %s)" % defaults[k] if k in defaults.keys() else ""))
     else:
         action = wd.api[operation]
 
+        # determine required and optional arguments for operation
         args = ""
         for i in range(1, action['arguments']['max'] + 1):
             args += " %s<arg%d>%s" % ("[" if i > action['arguments']['min'] else "", i, "]" if i > action['arguments']['min'] else "")
 
+        # print info and syntax
         print(action['description'])
         print("\nSyntax: %s %s%s" % (sys.argv[0], operation, args))
 
+        # print description per argument
         if 'descriptions' in action:
             print("\nArguments:")
             for a,d in action['descriptions'].items():
@@ -552,19 +558,16 @@ def main(argv):
     # define quick options, long: short
     quickopts = {"headers": "", "head": "", "no-parse": "", "recursive": "R", "sort": "", "reverse": "r",
                  "dirs-first": "t", "files-only": "f", "dirs-only": "d", "summary": "u", "verbose": "v", "no-verify": "k", "debug": "", "dry-run": "n", "human": "h", "yes": "y",
-                 "quiet": "q", "no-colors": "", "empty": "e"}
+                 "quiet": "q", "no-colors": "", "empty": "e", "credentials=": "c:", "printf=": "p:", "help": "", "version": ""}
     quickoptsa = list(filter(lambda x: x > "", quickopts.values()))
-    longopts = ["help", "version", "credentials=", "printf="]
 
     # assign values to quick options
-    common.defaults = {**common.defaults, **{k: False for k in quickopts.keys()}}
+    common.defaults = {**common.defaults, **{k: False for k in quickopts.keys() if k.replace('=', '') not in common.defaults}}
     common.options = copy.deepcopy(common.defaults)
 
     # handle arguments
     try:
-        opts, args = getopt.gnu_getopt(argv,
-                                       "vnc:p:" + "".join(quickoptsa),
-                                       longopts + list(quickopts.keys()))
+        opts, args = getopt.gnu_getopt(argv, "".join(quickoptsa), list(quickopts.keys()))
     except getopt.GetoptError as e:
         error(e, 1)
 
@@ -574,28 +577,28 @@ def main(argv):
     # set operation
     operation = args[0] if len(args) > 0 else ""
 
-    # parse other
+    # remove = and : in options
+    quickoptsm = list(map(lambda x: x.replace('=',''), quickopts))
+    quickoptsam = list(map(lambda x: x.replace(':',''), quickoptsa))
+
+    # parse options and arguments
     for opt, arg in opts:
         if opt in ["--help"]:
-            help(wd, operation, dict(quickopts, **dict(map(lambda x: (x, ""), longopts))), common.defaults)
-            sys.exit()
-        elif opt in ["--credentials", "-c"]:
-            common.options.update({"credentials": arg})
-        elif opt in ["--printf", "-p"]:
-            common.options.update({"printf": arg})
-        elif opt[2:] in quickopts:
-            common.options[opt[2:]] = True
-        elif opt[1:] in quickoptsa:
+            help(wd, operation, quickopts, common.defaults)
+            sys.exit(0)
+        elif opt[2:] in quickoptsm:
+            common.options[opt[2:]] = arg if arg > "" else True
+        elif opt[1:] in quickoptsam:
             index = [k for k,v in quickopts.items() if v == opt[1:]][0]
-            common.options[index] = True
+            common.options[index] = arg if arg > "" else True
         elif opt == "--version":
             print("%s %s" % (TITLE, VERSION))
-            sys.exit(1)
+            sys.exit(0)
 
     # check operation
     if operation == "":
         usage()
-        sys.exit(2)
+        sys.exit(1)
 
     # init operation
     if wd.setargs(operation, args[1:]):

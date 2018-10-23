@@ -1,11 +1,10 @@
 # Compact OwnCloud/NextCloud WebDAV client
-A simple and compact WebDAV client written in Python.
+A simple and compact WebDAV client written in Python 3.
 
 ### Features
 - All WebDAV operations supported
 - Flexible listing, with optional recursion
 - Proper error reporting
-- Proper input validation
 - Flexible instance targetting
 
 ### Requirements
@@ -43,6 +42,12 @@ dav.py --help
 
 This list all available operations and options.
 
+You can find more detailed information per operation through:
+
+```sh
+dav.py <operation> --help
+```
+
 ### Examples
 - List contents of your root folder:
 
@@ -53,10 +58,10 @@ dav.py list /
 - List contents of your folder 'my/excellent/folder', display subfolders first, show a summary at the end, sort alphabetically, show human-readable sizes:
 
 ```sh
-dav.py list my/excellent/folder -hsuf
+dav.py list my/excellent/folder -tuh --sort
 ```
 
-- Create a folder 'folder':
+- Create a folder 'folder' in root:
 
 ```sh
 dav.py mkcol folder
@@ -89,11 +94,11 @@ dav.py copy test/test.dat test/test.txt
 - Download a file `test/test.txt`
 
 ```sh
-dav.py download /test/test.txt
+dav.py download test/test.txt
 ```
 
 - Upload a file `test.txt` to folder `test`:
 
 ```sh
-dav.py upload /test/test.txt test.txt
+dav.py upload test/test.txt test.txt
 ```
