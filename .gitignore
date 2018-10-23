@@ -2,8 +2,9 @@
 *.pyc
 __pycache__
 .python-version
-*.md
+HISTORY.md
 *.txt
 *.json
 !webdav.json
 !credentials.stub.json
+
