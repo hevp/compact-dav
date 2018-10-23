@@ -1,0 +1,9 @@
+.DS_Store
+*.pyc
+__pycache__
+.python-version
+*.md
+*.txt
+*.json
+!webdav.json
+!credentials.stub.json

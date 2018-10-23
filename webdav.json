@@ -1,0 +1,147 @@
+{
+    "download": {
+        "method": "get",
+        "description": "Download a file",
+        "arguments": {
+            "min": 1,
+            "max": 2
+        },
+        "descriptions": {
+            "0": "Relative remote path of file",
+            "1": "Relative local path to store data to"
+        },
+        "options": {
+            "target": 2
+        }
+    },
+    "upload": {
+        "method": "put",
+        "description": "Upload a file",
+        "arguments": {
+            "min": 2,
+            "max": 2
+        },
+        "descriptions": {
+            "0": "Relative remote target path",
+            "1": "Relative local path of file to upload"
+        },
+        "options": {
+            "file": 2
+        }
+    },
+    "list": {
+        "method": "propfind",
+        "description": "List properties of path",
+        "parsing": {
+            "items": "response",
+            "variables": {
+                "path": {
+                    "type": "uri",
+                    "xpath": "href"
+                },
+                "date": {
+                    "type": "date",
+                    "xpath": "propstat/prop/getlastmodified"
+                },
+                "type": {
+                    "type": "enum",
+                    "xpath": "propstat/prop/resourcetype/collection",
+                    "values": {
+                        "present": "d",
+                        "absent": "f"
+                    }
+                },
+                "mimetype": "propstat/prop/getcontenttype",
+                "size": {
+                    "type": "int",
+                    "xpath": "propstat/prop/quota-used-bytes|propstat/prop/getcontentlength"
+                }
+            }
+        },
+        "descriptions": {
+            "0": "Relative remote path of object"
+        }
+    },
+    "move": {
+        "method": "move",
+        "description": "Move or rename a file or folder",
+        "arguments": {
+            "min": 2,
+            "max": 2
+        },
+        "headers": {
+            "destination": "@2"
+        },
+        "options": {
+            "confirm": true,
+            "exists": true
+        },
+        "descriptions": {
+            "0": "Relative remote path of source object",
+            "1": "Relative remote path of target object"
+        }
+    },
+    "copy": {
+        "method": "copy",
+        "description": "Copy a file or folder",
+        "arguments": {
+            "min": 2,
+            "max": 2
+        },
+        "headers": {
+            "destination": "@2"
+        },
+        "options": {
+            "exists": true
+        },
+        "descriptions": {
+            "0": "Relative remote path of source object",
+            "1": "Relative remote path of target object"
+        }
+    },
+    "delete": {
+        "method": "delete",
+        "description": "Delete a file or folder",
+        "options": {
+            "confirm": true,
+            "exists": true
+        },
+        "descriptions": {
+            "0": "Relative remote path of object"
+        }
+    },
+    "update": {
+        "method": "proppatch",
+        "description": "Update property of file or folder",
+        "arguments": {
+            "min": 3,
+            "max": 3
+        },
+        "descriptions": {
+            "0": "Relative remote path of object",
+            "1": "Property name",
+            "2": "Property value"
+        }
+    },
+    "mkcol": {
+        "method": "mkcol",
+        "description": "Create new collection",
+        "descriptions": {
+            "0": "Relative remote path of new collection"
+        }
+    },
+    "lock": {
+        "method": "lock",
+        "description": "Lock an object",
+        "descriptions": {
+            "0": "Relative remote path of object"
+        }
+    },
+    "unlock": {
+        "method": "unlock",
+        "description": "Unlock an object",
+        "descriptions": {
+            "0": "Relative remote path of object"
+        }
+    }
+}
