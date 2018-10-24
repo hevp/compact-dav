@@ -57,10 +57,10 @@ def verbose(msg):
 
     message(sys.stdout, msg, "", '\x1b[33m')
 
-def debug(msg):
+def debug(msg, force=False):
     ''' Print debug message'''
 
-    if not options['debug']:
+    if not options['debug'] and not force:
         return
 
     message(sys.stdout, msg, "", '\x1b[32m')

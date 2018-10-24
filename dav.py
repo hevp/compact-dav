@@ -17,6 +17,8 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 
 class ChunkedFile(object):
+    """ Chunked file upload class to be used with requests package """
+
     def __init__(self, filename, chunksize=1024*1024*10):
         self.chunksize = chunksize
         try:
@@ -81,7 +83,7 @@ class DAVRequest(object):
 
         # print headers, exit if only head request
         if self.options['headers'] or self.options['head']:
-            print(self.response.headers)
+            debug("Response headers: %s" % self.response.headers, True)
             if self.options['head']:
                 return False
 
@@ -90,7 +92,7 @@ class DAVRequest(object):
 
         # if failed exit
         if self.response.status_code not in expectedStatus:
-            self._requestfail()
+            return False #self._requestfail()
         else:
             # parse based on given content type
             if 'Content-Type' in self.response.headers and not self.options['no-parse']:
@@ -108,7 +110,7 @@ class DAVRequest(object):
                         error("could not decode JSON data: %s" % e)
 
             self.success = True
-            debug("%s (%s)" % (self.response.reason, self.response.status_code))
+            debug("Response: %s (%s)" % (self.response.reason, self.response.status_code))
 
         return self.result
 
@@ -135,10 +137,9 @@ class WebDAVClient(object):
 
     def __init__(self, options):
         self.args = {}
-        self.result = ""
-        self.callcount = 0
-        self.cache = []
+        self.results = None
         self.options = options
+        self.headers = {}
 
         # load API definition
         try:
@@ -217,41 +218,42 @@ class WebDAVClient(object):
         # start in root path
         self.options["source"] = self.options["root"]
 
-        # check operation  requirements
+        # check operation requirements
         if not self.exists() or not self.confirm():
             return False
 
         # do request
-        results = self.request(self.options)
+        self.results = self.doRequest(self.options)
 
         # if boolean false, return
-        if results == False:
+        if self.results == False:
             return False
 
         # return immediately if no parsing requested
         if not "parsing" in self.action or self.options['no-parse']:
-            return results
+            return True
 
         # show results
-        if len(results) > 0:
-            self.printFormat(self.options["printf"], results)
+        if len(self.results) > 0:
+            result = self.printFormat(self.options["printf"], self.results)
 
             # display summary if requested
             if self.options['summary']:
-                self.printSummary(results)
+                result += self.printSummary(self.results)
+
+            self.results = result
         else:
-            return "no results"
+            self.results = "no results"
 
-        return False
+        return True
 
-    def request(self, options={}):
+    def doRequest(self, options={}):
         # replace client options by local options
         options = {**self.options, **options}
 
-        req = DAVAuthRequest(self.credentials, options)
+        self.request = DAVAuthRequest(self.credentials, options)
 
         # set request headers if required
-        headers = {}
         if "headers" in self.action:
             for h, v in self.action["headers"].items():
                 m = re.match('@([0-9]+)', v)
@@ -259,23 +261,23 @@ class WebDAVClient(object):
                     val = self.credentials['hostname'] + self.credentials['endpoint'] + self.args[int(m.group(1))-1]
                 else:
                     val = v
-                headers[h] = val
+                self.headers[h] = val
 
         # create file upload object if required
         data = ""
         if "file" in self.action["options"]:
             data = ChunkedFile(self.args[1])
-            headers['Content-Type'] = 'application/octet-stream'
+            self.headers['Content-Type'] = 'application/octet-stream'
 
         # run request, exits early if dry-run
-        response = req.run(self.action["method"], options["source"], headers=headers, data=data)
+        response = self.request.run(self.action["method"], options["source"], headers=self.headers, data=data)
 
         # return if failed
-        if not req.hassuccess():
+        if not self.request.hassuccess():
             return False
 
         # exit if dry-run
-        if options['dry-run']:
+        if self.options['dry-run']:
             return False
 
         # return immediately if no parsing requested
@@ -286,11 +288,11 @@ class WebDAVClient(object):
         results = self.parse(response, options)
 
         # recursive processing
-        if options['recursive']:
+        if self.options['recursive']:
             recursiveresults = []
             for l in results:
                 if l['type'] == 'd':
-                    recursiveresults += self.request({"source": "%s%s" % (options["source"], self.getRelativePath(l, "path"))})
+                    recursiveresults += self.doRequest({"source": "%s%s" % (options["source"], self.getRelativePath(l, "path"))})
             results += recursiveresults
 
         # filtering
@@ -323,7 +325,10 @@ class WebDAVClient(object):
         res = req.run("propfind", self.options["target"])
 
         if req.response.status_code in DAVRequest.SUCCESS:
-            return error("cannot %s: target path %s already exists" % (self.action["method"], self.options["target"]))
+            if not self.options['overwrite']:
+                return error("cannot %s: target path %s already exists" % (self.action["method"], self.options["target"]))
+            else:
+                self.headers['Overwrite'] = 'T'
 
         return True
 
@@ -339,13 +344,12 @@ class WebDAVClient(object):
         if self.options['yes']:
             print("%sy" % text)
         else:
-            accept = False
-            while not accept:
+            while True:
                 choice = input(text)
                 if choice in ['y', 'all']:
-                    accept = True
+                    break
                 elif choice in ['n', 'c']:
-                    sys.exit(0)
+                    return False
 
         return True
 
@@ -423,32 +427,33 @@ class WebDAVClient(object):
 
         return val
 
-    def printFormat(self, text, listing):
-        # find {<varname>:<length>}
-        m = re.findall('{([^}:]+):?([^}]+)?}', text)
+    def printFormat(self, printf, listing):
+        printResult = ""
 
-        if not m:
-            return text
+        # find {<varname>:<length>}
+        matching = re.findall('{([^}:]+):?([^}]+)?}', printf)
+
+        if not matching:
+            return printf
 
         # copy listing
         results = []
 
         # loop through result list
-        for l in listing:
-            if self.options['recursive'] and l['type'] == 'd':
+        for item in listing:
+            if self.options['recursive'] and item['type'] == 'd':
                 continue
 
-            r = copy.deepcopy(l)
-
-            # determine all found variables
-            for var in m:
+            # determine and possibly update all found variables
+            result = copy.deepcopy(item)
+            for var in matching:
                 # if found variable exists
-                if var[0] in r:
+                if var[0] in result:
                     # get the original value
-                    val = r[var[0]]
+                    val = result[var[0]]
                     # special treatment per variable
                     if var[0] == "path":
-                        val = self.getRelativePath(r, var[0])
+                        val = self.getRelativePath(result, var[0])
                     elif var[0] == "date":
                         val = dateparse(val).strftime("%Y-%m-%d %H:%M:%S")
                     elif var[0] == "size":
@@ -457,13 +462,13 @@ class WebDAVClient(object):
                     val = "<error>"
 
                 # update temporary result array with sanity check
-                r[var[0]] = val if val else ""
+                result[var[0]] = val if val else ""
 
-            results.append(r)
+            results.append(result)
 
         # determine maximum lengths of each field when necessary
         maxs = {}
-        for var in m:
+        for var in matching:
             if var[1] > '' and not var[1].isdigit():
                 # determine maximum length of all elements for this variable
                 # store as string
@@ -471,12 +476,12 @@ class WebDAVClient(object):
                 maxs[var[0]] = str(max(lengths)) if len(lengths) > 0 else '0'
 
         # list all elements
-        for r in results:
-            t = text
+        for result in results:
+            text = printf
 
             # determine all variables
-            for var in m:
-                val = r[var[0]]
+            for var in matching:
+                val = result[var[0]]
 
                 # justification
                 if var[1] > '':
@@ -488,10 +493,12 @@ class WebDAVClient(object):
                         val = ("%" + maxs[var[0]] + "s") % val
 
                 # replace variable with value
-                t = t.replace("{%s}" % ":".join(filter(lambda x: x>'', list(var))), val)
+                text = text.replace("{%s}" % ":".join(filter(lambda x: x>'', list(var))), val)
 
             # print resulting string
-            print(t)
+            printResult += "%s\n" % text
+
+        return printResult
 
     def printSummary(self, listing):
         # filter out any directory if recursive
@@ -503,12 +510,12 @@ class WebDAVClient(object):
         fcount = len(res) - dcount
 
         # print total size, file count if > 0, directory count if > 0
-        print("%s %s%s%s%s%s" % ("\n" if len(listing) > 0 else "",
-                                 self.makeHuman(lsum),
-                                 " in " if len(listing) > 0 else "",
-                                 "%d file%s" % (fcount, "s" if fcount != 1 else "") if fcount > 0 else "",
-                                 " and " if (dcount > 0 and fcount > 0) else "",
-                                 "%d director%s" % (dcount, "ies" if dcount != 1 else "y") if dcount > 0 else ""))
+        return "%s %s%s%s%s%s\n" % ("\n" if len(listing) > 0 else "",
+                                  self.makeHuman(lsum),
+                                  " in " if len(listing) > 0 else "",
+                                  "%d file%s" % (fcount, "s" if fcount != 1 else "") if fcount > 0 else "",
+                                  " and " if (dcount > 0 and fcount > 0) else "",
+                                  "%d director%s" % (dcount, "ies" if dcount != 1 else "y") if dcount > 0 else "")
 
     def makeHuman(self, value, addBytes=False):
         return humanize.naturalsize(value) if self.options['human'] else "%d%s" % (value, " bytes" if addBytes else "")
@@ -560,7 +567,7 @@ def help(wd, operation, options, defaults):
 
 def main(argv):
     # define quick options, long: short
-    quickopts = {"headers": "", "head": "", "no-parse": "", "recursive": "R", "sort": "", "reverse": "r",
+    quickopts = {"overwrite": "o", "headers": "", "head": "", "no-parse": "", "recursive": "R", "sort": "", "reverse": "r",
                  "dirs-first": "t", "files-only": "f", "dirs-only": "d", "summary": "u", "verbose": "v", "no-verify": "k", "debug": "", "dry-run": "n", "human": "h", "yes": "y",
                  "quiet": "q", "no-colors": "", "empty": "e", "credentials=": "c:", "printf=": "p:", "help": "", "version": ""}
 
@@ -616,8 +623,14 @@ def main(argv):
 
         # if there is a result, print it
         if res:
-            sys.stdout.write(res)
-            sys.stdout.flush()
+            if wd.request.hassuccess() and not wd.results:
+                note("%s successful" % operation)
+            else:
+                # print out the result, could be XML data
+                sys.stdout.write(wd.results)
+                sys.stdout.flush()
+        else:
+            sys.exit(1)
 
 if __name__ == "__main__":
     main(sys.argv[1:])

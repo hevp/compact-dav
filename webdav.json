@@ -143,5 +143,12 @@
         "descriptions": {
             "0": "Relative remote path of object"
         }
+    },
+    "report": {
+        "method": "report",
+        "description": "Report properties",
+        "descriptions": {
+            "0": "Relative remote path of object"
+        }
     }
 }
