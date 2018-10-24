@@ -70,7 +70,7 @@
             "max": 2
         },
         "headers": {
-            "destination": "@2"
+            "destination": "@1"
         },
         "options": {
             "confirm": true,
@@ -89,7 +89,7 @@
             "max": 2
         },
         "headers": {
-            "destination": "@2"
+            "destination": "@1"
         },
         "options": {
             "exists": true
@@ -121,6 +121,16 @@
             "0": "Relative remote path of object",
             "1": "Property name",
             "2": "Property value"
+        },
+        "data": {
+            "container": "propertyupdate",
+            "action": "set",
+            "properties": [
+                {
+                    "tag": "@1",
+                    "value": "@2"
+                }
+            ]
         }
     },
     "mkcol": {

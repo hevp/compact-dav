@@ -247,6 +247,12 @@ class WebDAVClient(object):
 
         return True
 
+    def _getArgumentByTagReference(self, v):
+        m = re.match('@([0-9]+)', v)
+        if m and len(self.args) > int(m.group(1)):
+            return self.args[int(m.group(1))]
+        return False
+
     def doRequest(self, options={}):
         # replace client options by local options
         options = {**self.options, **options}
@@ -256,18 +262,31 @@ class WebDAVClient(object):
         # set request headers if required
         if "headers" in self.action:
             for h, v in self.action["headers"].items():
-                m = re.match('@([0-9]+)', v)
-                if m and len(self.args) > int(m.group(1)) - 1:
-                    val = self.credentials['hostname'] + self.credentials['endpoint'] + self.args[int(m.group(1))-1]
-                else:
-                    val = v
+                arg = self._getArgumentByTagReference(v)
+                val = self.credentials['hostname'] + self.credentials['endpoint'] + arg if arg else v
                 self.headers[h] = val
 
-        # create file upload object if required
+        # add data to request
         data = ""
         if "file" in self.action["options"]:
+            # create file upload object and set content type
             data = ChunkedFile(self.args[1])
             self.headers['Content-Type'] = 'application/octet-stream'
+        elif "data" in self.action:
+            try:
+                nsmap = {"d": "DAV:", "oc": "http://owncloud.org/ns"}
+                xml = etree.Element("{%s}%s" % (nsmap["d"], self.action["data"]["container"]), nsmap=nsmap)
+                action = etree.SubElement(xml, "{%s}%s" % (nsmap["d"], self.action["data"]["action"]), nsmap=nsmap)
+                prop = etree.SubElement(action, "{%s}%s" % (nsmap["d"], "prop"), nsmap=nsmap)
+                for p in self.action["data"]["properties"]:
+                    arg = self._getArgumentByTagReference(p["tag"])
+                    prope = etree.SubElement(prop, "{%s}%s" % (nsmap["oc"], arg if arg else "prop"), nsmap=nsmap)
+                    arg = self._getArgumentByTagReference(p["value"])
+                    prope.text = arg if arg else "value"
+
+                data = etree.tostring(xml).decode('utf-8')
+            except Exception as e:
+                error(e, 1)
 
         # run request, exits early if dry-run
         response = self.request.run(self.action["method"], options["source"], headers=self.headers, data=data)
@@ -623,7 +642,7 @@ def main(argv):
 
         # if there is a result, print it
         if res:
-            if wd.request.hassuccess() and not wd.results:
+            if wd.request.hassuccess() and wd.results is not None:
                 note("%s successful" % operation)
             else:
                 # print out the result, could be XML data
