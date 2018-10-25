@@ -12,7 +12,7 @@ A simple and compact WebDAV client written in Python 3.
 - Various packages, including `requests`
 
 ### Configuration
-You need a configuration file in JSON format with the following elements:
+You need a configuration file in JSON format in order to allow the client to contact your WebDAV server. It must contain the following elements:
 
 ```
 {
@@ -24,6 +24,8 @@ You need a configuration file in JSON format with the following elements:
 ```
 
 You can find the endpoint and credentials in the settings of your WebDAV installation, e.g. OwnCloud or NextCloud.
+
+A stub configuration file is provided as `credentials.stub.json`. Copy it and fill in your values.
 
 ### How to run
 General syntax:

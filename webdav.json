@@ -4,14 +4,12 @@
         "description": "Download a file",
         "arguments": {
             "min": 1,
-            "max": 2
+            "max": 2,
+            "target": "@1"
         },
         "descriptions": {
             "0": "Relative remote path of file",
             "1": "Relative local path to store data to"
-        },
-        "options": {
-            "target": 2
         }
     },
     "upload": {
@@ -19,14 +17,12 @@
         "description": "Upload a file",
         "arguments": {
             "min": 2,
-            "max": 2
+            "max": 2,
+            "file": "@1"
         },
         "descriptions": {
             "0": "Relative remote target path",
             "1": "Relative local path of file to upload"
-        },
-        "options": {
-            "file": 2
         }
     },
     "list": {
@@ -123,14 +119,16 @@
             "2": "Property value"
         },
         "data": {
-            "container": "propertyupdate",
-            "action": "set",
-            "properties": [
-                {
-                    "tag": "@1",
-                    "value": "@2"
+            "root": "d:propertyupdate",
+            "elements": {
+                "d:set": {
+                    "d:prop": [
+                        {
+                            "oc:@1": "@2"
+                        }
+                    ]
                 }
-            ]
+            }
         }
     },
     "mkcol": {
@@ -156,9 +154,40 @@
     },
     "report": {
         "method": "report",
-        "description": "Report properties",
+        "description": "Report anything by property value",
+        "arguments": {
+            "min": 1,
+            "max": 2
+        },
         "descriptions": {
-            "0": "Relative remote path of object"
+            "0": "Property name",
+            "1": "Property value"
+        },
+        "defaults": {
+            "1": "1"
+        },
+        "options": {
+            "printf": "{path}",
+            "no-path": true
+        },
+        "data": {
+            "root": "oc:filter-files",
+            "elements": {
+                "oc:filter-rules": [
+                    {
+                        "oc:@0": "@1"
+                    }
+                ]
+            }
+        },
+        "parsing": {
+            "items": "response",
+            "variables": {
+                "path": {
+                    "type": "uri",
+                    "xpath": "href"
+                }
+            }
         }
     }
 }
