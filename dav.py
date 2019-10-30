@@ -15,6 +15,8 @@ from common import *
 from lxml import etree
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
+TITLE = "CompactDAV"
+VERSION = "v1.0"
 
 class ChunkedFile(object):
     """ Chunked file upload class to be used with requests package """
@@ -625,11 +627,15 @@ class WebDAVClient(object):
     def makeHuman(self, value, addBytes=False):
         return humanize.naturalsize(value) if self.options['human'] else "%d%s" % (value, " bytes" if addBytes else "")
 
+def version():
+    print("%s %s" % (TITLE, VERSION))
+
 def usage():
     print("usage: dav.py <operation> <options> <args..>")
 
 def help(wd, operation, options, defaults):
     if operation == "" or operation not in wd.api.keys():
+        version()
         usage()
 
         # get maximum length of name of operation
@@ -708,7 +714,7 @@ def main(argv):
         help(wd, operation, quickopts, common.defaults)
         sys.exit(0)
     elif common.options['version']:
-        print("%s %s" % (TITLE, VERSION))
+        version()
         sys.exit(0)
 
     # check operation
