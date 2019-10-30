@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """ Compact OwnCloud/NextCloud WebDAV client
     Author: hevp
@@ -7,7 +7,7 @@
     Packages: see below
 """
 
-import sys, getopt, os, requests, json, cchardet, simplejson, copy, re, urllib.parse, humanize
+import sys, getopt, os, requests, json, cchardet, simplejson, copy, re, urllib, humanize
 from dateutil.parser import parse as dateparse
 import common
 from common import *
@@ -53,7 +53,7 @@ class DAVRequest(object):
         verbose("Request data: %s" % (data[:250] if type(data) is str else type(data)))
         verbose("Request headers: %s" % simplejson.dumps(headers))
 
-        if "head" in self.options and self.options['head']:
+        if self.options['head']:
             method = "HEAD"
 
         # construct url
@@ -176,8 +176,7 @@ class WebDAVClient(object):
             # post-process API definition
             for o, ov in self.api.items():
                 # operation definition completeness test
-                required = ['method', 'description']
-                missing = set(required).difference(set(ov.keys()))
+                missing = ['method', 'description'] - ov.keys()
                 if len(missing) > 0:
                     error('missing definition elements for operation \'%s\': \'%s\'' % (o, "\', \'".join(missing)), 1)
 
@@ -215,8 +214,7 @@ class WebDAVClient(object):
         debug("credentials file \'%s\'" % filename)
 
         # credentials completeness test
-        required = ['hostname', 'endpoint', 'user', 'token']
-        missing = set(required).difference(set(self.credentials.keys()))
+        missing = ['hostname', 'endpoint', 'user', 'token'] - self.credentials.keys()
         if len(missing) > 0:
             error('missing credential elements: %s' % ", ".join(missing), 1)
 
@@ -353,7 +351,7 @@ class WebDAVClient(object):
 
     def doRequest(self, options={}):
         # replace client options by local options
-        options = {**self.options, **options}
+        options = dict(self.options, **options)
 
         self.request = DAVAuthRequest(self.credentials, options)
 
@@ -681,7 +679,7 @@ def main(argv):
     quickoptsm = dict((k.replace('=',''), v.replace(':','')) for k,v in quickopts.items())
 
     # assign values to quick options
-    common.defaults = {**common.defaults, **{k: False for k in quickoptsm.keys() if k not in common.defaults}}
+    common.defaults = dict(common.defaults, **{k: False for k in quickoptsm.keys() if k not in common.defaults})
     common.options = copy.deepcopy(common.defaults)
 
     # handle arguments

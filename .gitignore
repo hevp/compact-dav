@@ -7,4 +7,3 @@ HISTORY.md
 *.json
 !webdav.json
 !credentials.stub.json
-
