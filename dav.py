@@ -7,16 +7,23 @@
     Packages: see below
 """
 
-import sys, getopt, os, requests, json, cchardet, simplejson, copy, re, urllib, humanize
-from dateutil.parser import parse as dateparse
+import sys, getopt, os, requests, json, cchardet, simplejson, copy, re
 import common
 from common import *
+from parse import *
+from generate import *
 
 from lxml import etree
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 TITLE = "CompactDAV"
-VERSION = "v1.0"
+VERSION = "1.1"
+
+class ClientOptions(dict):
+    def __init__(self, options, defaults):
+        self.update(options)
+        self["defaults"] = defaults
+        self["credentials"] = None
 
 class ChunkedFile():
     """ Chunked file upload class to be used with requests package """
@@ -42,9 +49,8 @@ class DAVRequest():
 
     SUCCESS = [200, 201, 204, 207]
 
-    def __init__(self, credentials, opts={}):
-        self.credentials = credentials
-        self.options = opts
+    def __init__(self, options={}):
+        self.options = options
         self.result = None
         self.request = None
         self.response = None
@@ -58,7 +64,7 @@ class DAVRequest():
             method = "HEAD"
 
         # construct url
-        url = self.credentials["hostname"] + self.credentials["endpoint"]
+        url = self.options["credentials"]["hostname"] + self.options["credentials"]["endpoint"]
         if not self.options['no-path']:
             url += path
 
@@ -133,7 +139,6 @@ class DAVRequest():
                     self.result = etree.fromstring(self.result.encode('ascii'))
                 except Exception as e:
                     error("could not decode XML data: %s" % e)
-
             elif info[0] == 'application/json':
                 try:
                     self.result = simplejson.loads(self.result)
@@ -160,7 +165,7 @@ class DAVRequest():
 
 class DAVAuthRequest(DAVRequest):
     def run(self, method, path, headers={}, params={}, data="", expectedStatus=DAVRequest.SUCCESS, quiet=False):
-        return DAVRequest.run(self, method, path, headers, params, data, expectedStatus, auth=(self.credentials["user"], self.credentials["token"]), quiet=quiet)
+        return DAVRequest.run(self, method, path, headers, params, data, expectedStatus, auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]), quiet=quiet)
 
 
 class WebDAVClient():
@@ -207,23 +212,23 @@ class WebDAVClient():
                         if not option in self.options:
                             raise Exception("invalid option %s" % option)
                         # alter only if set application option does not differs from default
-                        if self.options[option] == common.defaults[option]:
+                        if self.options[option] == self.options["defaults"][option]:
                             self.options[option] = value
         except Exception as e:
             error("api load failed: %s" % e, 1)
 
     def credentials(self, filename):
-        try:
-            with open(os.path.abspath(filename), "r") as f:
-                text = f.read()
-            self.credentials = json.loads(text)
-        except Exception as e:
-            error("credentials loading failed: %s" % e, 1)
+        #try:
+        with open(os.path.abspath(filename), "r") as f:
+            text = f.read()
+        self.options["credentials"] = json.loads(text)
+        # except Exception as e:
+        #     error("credentials loading failed: %s" % e, 1)
 
         debug("credentials file \'%s\'" % filename)
 
         # credentials completeness test
-        missing = ['hostname', 'endpoint', 'user', 'token'] - self.credentials.keys()
+        missing = ['hostname', 'endpoint', 'user', 'token'] - self.options["credentials"].keys()
         if len(missing) > 0:
             error('missing credential elements: %s' % ", ".join(missing), 1)
 
@@ -235,27 +240,28 @@ class WebDAVClient():
             error("unknown operation \'%s\'" % operation, 1)
 
         # copy arguments
+        self.options["operation"] = operation
         self.args = copy.deepcopy(args)
 
         # set arguments
-        self.operation = self.api[operation]
-        if "min" in self.operation["arguments"] and "max" in self.operation["arguments"]:
-            if len(self.args) < self.operation["arguments"]["min"] or len(self.args) > self.operation["arguments"]["max"]:
+        self.defs = self.api[operation]
+        if "min" in self.defs["arguments"] and "max" in self.defs["arguments"]:
+            if len(self.args) < self.defs["arguments"]["min"] or len(self.args) > self.defs["arguments"]["max"]:
                 error("incorrect number of arguments", 1)
             # fill missing with None
-            for i in range(len(self.args) - 1, self.operation["arguments"]["max"]):
+            for i in range(len(self.args) - 1, self.defs["arguments"]["max"]):
                 # try to add default value
-                if "defaults" in self.operation and str(i+1) in self.operation["defaults"].keys():
-                    self.args.append(self.operation["defaults"][str(i+1)])
+                if "defaults" in self.defs and str(i+1) in self.defs["defaults"].keys():
+                    self.args.append(self.defs["defaults"][str(i+1)])
                 else:
                     self.args.append("")
 
         # process other arguments
-        for k, v in self.operation["arguments"].items():
+        for k, v in self.defs["arguments"].items():
             if k in ["min", "max"]:
                 continue
             # replace reference in argument value
-            self.operation["arguments"][k] = self._getArgumentByTagReference(v)
+            self.defs["arguments"][k] = getArgumentByTagReference(v)
 
         # make sure a forward slash precedes the path
         self.options["root"] = ("/%s" % self.args[0]).replace('//', '/')
@@ -273,7 +279,7 @@ class WebDAVClient():
                 debug('InsecureRequestWarning disabled')
 
         # start in root path, except if no-path option set
-        self.options["source"] = self.options["root"] if not "no-path" in self.operation["options"] or not self.operation["options"]["no-path"] else ""
+        self.options["source"] = self.options["root"] if not "no-path" in self.defs["options"] or not self.defs["options"]["no-path"] else ""
 
         # check operation requirements
         if not self.exists() or not self.confirm():
@@ -287,27 +293,30 @@ class WebDAVClient():
             return False
 
         # if downloading file and target has been defined
-        if "target" in self.operation["arguments"] and self.operation["arguments"]["target"] > "":
+        if "target" in self.defs["arguments"] and self.defs["arguments"]["target"] > "":
             try:
-                if os.path.exists(self.operation["arguments"]["target"]) and not self.options["overwrite"]:
-                    error("target file %s already exists" % self.operation["arguments"]["target"], 1)
-                with open(self.operation["arguments"]["target"], "wb") as f:
+                if os.path.exists(self.defs["arguments"]["target"]) and not self.options["overwrite"]:
+                    error("target file %s already exists" % self.defs["arguments"]["target"], 1)
+                with open(self.defs["arguments"]["target"], "wb") as f:
                     f.write(self.results.encode('utf-8'))
             except Exception as e:
                 error(e, 1)
             self.results = True
 
         # return immediately if no parsing requested
-        if not "parsing" in self.operation or self.options['no-parse']:
+        if not "parsing" in self.defs or self.options['no-parse']:
             return True
 
         # show results
         if len(self.results) > 0:
-            result = self.printFormat(self.options["printf"], self.results)
+            for r in self.results:
+                if not r['scope'] == 'response':
+                    continue
+                result = r.format(self.options["printf"])
 
-            # display summary if requested
-            if self.options['summary']:
-                result += self.printSummary(self.results)
+                # display summary if requested
+                if self.options['summary']:
+                    result += r.format_summary()
 
             self.results = result
         else:
@@ -315,123 +324,72 @@ class WebDAVClient():
 
         return True
 
-    def _getArgumentByTagReference(self, v):
-        m = re.search('@([0-9]+)', v)
-        if not m:
-            return v
-
-        for g in m.groups():
-            if len(self.args) > int(g):
-                v = v.replace("@%s" % g, self.args[int(g)])
-            else:
-                error("tag reference: argument %s does not exist" % g)
-
-        return v
-
-    def _getXMLTag(self, tag, nsmap):
-        if ':' in tag:
-            tags = tag.split(':')
-            tag = "{%s}%s" % (nsmap[tags[0]], tags[1])
-        return tag
-
-    def _getXMLData(self, data, element=None):
-        NSMAP = {"d": "DAV:", "oc": "http://owncloud.org/ns", "nc": "http://nextcloud.org/ns"}
-
-        try:
-            # create the element itself
-            xml = etree.Element(self._getXMLTag(data["root"], NSMAP), nsmap=NSMAP) if element is None else element
-
-            # create any children recursively
-            for k, v in (data["elements"].items() if element is None else data.items()):
-                sub = etree.SubElement(xml, self._getXMLTag(k, NSMAP), nsmap=NSMAP)
-                if type(v) is dict:
-                    self._getXMLData(v, sub)
-                elif type(v) is list:
-                    for l in v:
-                        lk = self._getArgumentByTagReference(list(l.keys())[0])
-                        lv = self._getArgumentByTagReference(list(l.values())[0])
-                        prop = etree.SubElement(sub, self._getXMLTag(lk, NSMAP), nsmap=NSMAP)
-                        prop.text = lv
-                else:
-                    sub.text = v
-        except Exception as e:
-           error("xml generation failed: %s " % e, 1)
-
-        return etree.tostring(xml).decode('utf-8')
-
     def doRequest(self, options={}):
         # replace client options by local options
-        options = dict(self.options, **options)
+        opts = copy.deepcopy(self.options)
+        opts.update(options)
 
-        self.request = DAVAuthRequest(self.credentials, options)
+        self.request = DAVAuthRequest(options)
 
         # set request headers if required
-        if "headers" in self.operation:
-            for h, v in self.operation["headers"].items():
-                arg = self._getArgumentByTagReference(v)
-                val = self.credentials['hostname'] + self.credentials['endpoint'] + arg if arg else v
+        if "headers" in self.defs:
+            for h, v in self.defs["headers"].items():
+                arg = getArgumentByTagReference(v)
+                val = self.options["credentials"]['hostname'] + self.options["credentials"]['endpoint'] + arg if arg else v
                 self.headers[h] = val
 
         # add data to request if required
         data = ""
-        if "file" in self.operation["arguments"]:
+        if "file" in self.defs["arguments"]:
             # create file upload object and set content type
-            data = ChunkedFile(self.operation["arguments"]["file"])
+            data = ChunkedFile(self.defs["arguments"]["file"])
             self.headers['Content-Type'] = 'application/octet-stream'
-        elif "data" in self.operation:
-            data = self._getXMLData(self.operation["data"])
+        elif "data" in self.defs:
+            gen = GeneratorFactory.getGenerator(self.defs["data"], self.options)
+            data = gen.generate(self.defs["data"])
 
         # run request, exits early if dry-run
-        response = self.request.run(self.operation["method"], options["source"], headers=self.headers, data=data)
+        response = self.request.run(self.defs["method"], opts["source"], headers=self.headers, data=data)
 
         # return if failed
         if not self.request.hassuccess() or response == False:
             return False
 
         # exit if dry-run
-        if self.options['dry-run']:
+        if opts['dry-run']:
             return False
 
         # return immediately without response if no parsing defined
-        if "parsing" not in self.operation and not "filename" in self.request.download:
+        if "parsing" not in self.defs and not "filename" in self.request.download:
             return True
         # return immediately if no parsing requested
-        if self.options['no-parse'] or "filename" in self.request.download:
+        if opts['no-parse'] or "filename" in self.request.download:
             return response
 
         # parse request response
-        results = self.parse(response, options)
+        results = self.parse(response, opts)
 
         # recursive processing
         if self.options['recursive']:
             recursiveresults = []
-            for l in results:
+            for l in [r for r in results if r['scope'] == 'response']:
                 if l['type'] == 'd':
-                    recursiveresults += self.doRequest({"source": "%s%s" % (options["source"], self.getRelativePath(l, "path"))})
+                    recursiveresults += self.doRequest({"source": "%s%s" % (self.options["source"], self.getRelativePath(l, "path"))})
             results += recursiveresults
-
-        # filtering
-        if self.options['list-empty']:
-            results = list(filter(lambda x: x['type'] == 'd' and x['size'] == 0, results))
-        # filter dirs (wins) or files
-        if self.options['dirs-only']:
-            results = list(filter(lambda x: x['type'] == 'd', results))
-        elif self.options['files-only']:
-            results = list(filter(lambda x: x['type'] == 'f', results))
 
         return results
 
     def exists(self):
-        if not "exists" in self.operation["options"] or not self.operation["options"]["exists"]:
+        if not "exists" in self.defs["options"] or not self.defs["options"]["exists"]:
             return True
 
-        req = DAVAuthRequest(self.credentials, self.options)
+        req = DAVAuthRequest(self.options)
 
         # check if the source path exists
         res = req.run("propfind", self.options["source"], quiet=True)
 
         if not req.response.status_code in DAVRequest.SUCCESS:
-            return error("cannot %s: source path %s does not exist" % (self.operation["method"], self.options["source"]))
+            return error("cannot %s: source path %s does not exist" % (self.defs["method"], self.options["source"]))
 
         if self.args[1] == "":
             return True
@@ -441,17 +399,17 @@ class WebDAVClient():
 
         if req.response.status_code in DAVRequest.SUCCESS:
             if not self.options['overwrite']:
-                return error("cannot %s: target path %s already exists" % (self.operation["method"], self.options["target"]))
+                return error("cannot %s: target path %s already exists" % (self.defs["method"], self.options["target"]))
             else:
                 self.headers['Overwrite'] = 'T'
 
         return True
 
     def confirm(self):
-        if not "confirm" in self.operation["options"] or not self.operation["options"]["confirm"]:
+        if not "confirm" in self.defs["options"] or not self.defs["options"]["confirm"]:
             return True
 
-        text = "Are you sure you want to %s %s%s (y/n/all/c)? " % (self.operation["method"],
+        text = "Are you sure you want to %s %s%s (y/n/all/c)? " % (self.defs["method"],
                                                     "%s%s" % ("from " if self.args[1] is not None else "", self.options["source"]),
                                                     " to %s" % self.options["target"] if self.args[1] > "" else "")
 
@@ -468,180 +426,17 @@ class WebDAVClient():
 
         return True
 
-    def parse(self, res, options):
-        # get XML namespace map, excluding default namespace
-        nsmap = {k:v for k,v in res.nsmap.items() if k}
+    def parse(self, data, options):
+        return list(map(lambda p: ParserFactory.getParser(p, data, options), self.defs.get('parsing', [])))
 
-        # process result elements
-        results = []
-        for child in res.findall(".//d:%s" % self.operation["parsing"]["items"], nsmap):
-            variables = {}
-            for var, varv in self.operation["parsing"]["variables"].items():
-                for paths in varv["xpath"].split('|'):
-                    if var in variables:
-                        break
-
-                    p = ".//d:" + "/d:".join(paths.split('/'))
-                    v = child.find(p, nsmap)
-
-                    # note: booleans are stored invertedly due to sorting algorithm
-                    if v is not None and (var not in variables or variables[var] is None):
-                        if "type" in varv and varv["type"] == "bool":
-                            variables[var] = "0"
-                        elif "type" in varv and varv["type"] == "enum":
-                            if "values" in varv and "present" in varv["values"]:
-                                variables[var] = varv["values"]["present"]
-                            else:
-                                variables[var] = v.text
-                        elif v.text is not None:
-                            if "type" in varv and varv["type"] == "int":
-                                variables[var] = int(v.text)
-                            # treat as string
-                            else:
-                                variables[var] = v.text
-                    elif "type" in varv and varv["type"] == "bool":
-                        variables[var] = "1"
-                    elif "type" in varv and varv["type"] == "enum":
-                        if "values" in varv and "absent" in varv["values"]:
-                            variables[var] = varv["values"]["absent"]
-                        else:
-                            variables[var] = v.text
-
-            # add to results
-            results.append(variables)
-
-        # delete first (root) element
-        del results[0]
-
-        # apply sorting etc
-        sortkey = None
-        if options['sort'] and options['dirs-first']:
-            sortkey = lambda x: x['type'] + x['path'].lower()
-        elif options['sort']:
-            sortkey = lambda x: x['path'].lower()
-        elif options['dirs-first']:
-            sortkey = lambda x: x['type']
-
-        if sortkey is not None:
-            results.sort(key=sortkey, reverse=options['reverse'])
-
-        return results
-
-    def getRelativePath(self, r, var):
-        # remove endpoint, root folder and unquote
-        val = r[var].replace(self.credentials["endpoint"], "")
-        val = val.replace(self.options["root"], "", 1)
-        val = urllib.parse.unquote(val)
-
-        # add leading slash
-        sp = val.split('/')
-        if 'type' in r and r['type'] == 'd':
-            val = "/" + sp[-2]
-        elif len(sp) > 1:
-            val = "/".join(sp[1:])
-
-        return val
-
-    def printFormat(self, printf, listing):
-        printResult = ""
-
-        # find {<varname>:<length>}
-        matching = re.findall('{([^}:]+):?([^}]+)?}', printf)
-
-        if not matching:
-            return printf
-
-        # copy listing
-        results = []
-
-        # loop through result list
-        for item in listing:
-            if self.options['recursive'] and item['type'] == 'd':
-                continue
-
-            # determine and possibly update all found variables
-            result = copy.deepcopy(item)
-            for var in matching:
-                # if found variable exists
-                if var[0] in result:
-                    # get the original value
-                    val = result[var[0]]
-                    # special treatment per variable
-                    if var[0] == "path":
-                        val = self.getRelativePath(result, var[0])
-                    elif var[0] == "date":
-                        val = dateparse(val).strftime("%Y-%m-%d %H:%M:%S")
-                    elif var[0] == "size":
-                        val = self.makeHuman(val)
-                else:
-                    val = "<error>"
-
-                # update temporary result array with sanity check
-                result[var[0]] = val if val else ""
-
-            results.append(result)
-
-        # determine maximum lengths of each field when necessary
-        maxs = {}
-        for var in matching:
-            if var[1] > '' and not var[1].isdigit():
-                # determine maximum length of all elements for this variable
-                # store as string
-                lengths = list(map(lambda x: len(x[var[0]]), results))
-                maxs[var[0]] = str(max(lengths)) if len(lengths) > 0 else '0'
-
-        # list all elements
-        for result in results:
-            text = printf
-
-            # determine all variables
-            for var in matching:
-                val = result[var[0]]
-
-                # justification
-                if var[1] > '':
-                    if var[1].isdigit():
-                        val = ("%" + var[1] + "s") % val
-                    elif var[1] == 'l':
-                        val = ("%-" + maxs[var[0]] + "s") % val
-                    elif var[1] == 'r':
-                        val = ("%" + maxs[var[0]] + "s") % val
-
-                # replace variable with value
-                text = text.replace("{%s}" % ":".join(filter(lambda x: x>'', list(var))), val)
-
-            # print resulting string
-            printResult += "%s\n" % text
-
-        return printResult
-
-    def printSummary(self, listing):
-        # filter out any directory if recursive
-        res = listing if not self.options['recursive'] else list(filter(lambda x: x['type'] != "d", listing))
-
-        # get total size, directory and file counts
-        lsum = sum(map(lambda x: x['size'], res))
-        dcount = len(list(filter(lambda x: x['type'] == 'd', res)))
-        fcount = len(res) - dcount
-
-        # print total size, file count if > 0, directory count if > 0
-        return "%s %s%s%s%s%s\n" % ("\n" if len(listing) > 0 else "",
-                                  self.makeHuman(lsum),
-                                  " in " if len(listing) > 0 else "",
-                                  "%d file%s" % (fcount, "s" if fcount != 1 else "") if fcount > 0 else "",
-                                  " and " if (dcount > 0 and fcount > 0) else "",
-                                  "%d director%s" % (dcount, "ies" if dcount != 1 else "y") if dcount > 0 else "")
-
-    def makeHuman(self, value, addBytes=False):
-        return humanize.naturalsize(value) if self.options['human'] else "%d%s" % (value, " bytes" if addBytes else "")
 
 def version():
-    print("%s %s" % (TITLE, VERSION))
+    print("%s version %s" % (TITLE, VERSION))
 
 def usage():
     print("usage: dav.py <operation> <options> <args..>")
 
-def help(wd, operation, options, defaults):
+def help(wd, operation, quickopts):
     if operation == "" or operation not in wd.api.keys():
         version()
         usage()
@@ -653,17 +448,16 @@ def help(wd, operation, options, defaults):
         for o, ov in wd.api.items():
             print(("%-" + maxop + "s %s") % (o, ov["description"]))
 
-        # get maximum length of name of options
-        maxop = str(max(map(lambda x: len(x[0]), options.items())))
+        # get maximum length of name of options, and value
+        maxopk = str(max(map(lambda x: len(x), wd.options.keys())))
         # print options
         print("\nOptions:")
-        for k, v in options.items():
+        for k, v in quickopts.items():
             kr = k.replace('=', '')
-            vr = v.replace(':', '')
-            print(("--%-" + maxop + "s %-2s  %s %s") % (kr,
-                                                        "-%s" % vr if vr > "" else "",
-                                                        ("%s %-" + maxop + "s") % ("Enable" if kr == k else "Set", kr if kr in defaults.keys() else " " * (int(maxop) + 7)),
-                                                        "%s(default: %s)" % ("" if kr == k else " " * 3, defaults[kr] if kr in defaults.keys() else "")))
+            print(("%s --%-" + maxopk + "s  %s %s") % ("-%s " % v[0] if v else "   ",
+                                                      kr,
+                                                      ("%s %-" + maxopk + "s") % ("Enable" if kr == k else "Set", kr if kr in wd.options["defaults"].keys() else " " * (int(maxopk) + 7)),
+                                                      "%s(default: '%s')" % ("" if kr == k else " " * 3, wd.options["defaults"][kr] if kr in wd.options["defaults"].keys() else "")))
     else:
         # determine required and optional arguments for operation
         args = ""
@@ -672,13 +466,19 @@ def help(wd, operation, options, defaults):
 
         # print info and syntax
         print(wd.api[operation]['description'])
-        print("\nSyntax: %s %s%s" % (sys.argv[0], operation, args))
+        print("\nSyntax: %s %s%s%s" % (sys.argv[0], "[options] " if len(wd.api[operation]['options']) else "", operation, args))
 
         # print description per argument
         if 'descriptions' in wd.api[operation]:
             print("\nArguments:")
-            for a,d in wd.api[operation]['descriptions'].items():
-                print("  %s: %s" % (int(a)+1,d))
+            for a,d in filter(lambda x: x[0].isdigit(), wd.api[operation]['descriptions'].items()):
+                print("  %s: %s" % (int(a) + 1, d))
+            if len(wd.api[operation]['options']):
+                print("\nOptions:")
+                maxopk = str(max(map(lambda x: len(x), wd.api[operation]['descriptions'].keys())))
+                maxopv = str(max(map(lambda x: len(x), wd.api[operation]['descriptions'].values())))
+                for a,d in filter(lambda x: not x[0].isdigit(), wd.api[operation]['descriptions'].items()):
+                    print(("  --%-" + maxopk + "s  %-" + maxopv + "s  (default: '%s')") % (a, d, wd.options[a]))
 
     print()
 
@@ -686,7 +486,7 @@ def main(argv):
     # default values for options
     defaults = {
         "api": "webdav.json",
-        "credentials": "credentials.json",
+        "credentials-file": "credentials.json",
         "printf": "{date} {size:r} {path}",
         "timeout": 86400
     }
@@ -695,14 +495,14 @@ def main(argv):
     quickopts = {"overwrite": "o", "headers": "", "head": "", "no-parse": "", "recursive": "R", "sort": "", "reverse": "r",
                  "dirs-first": "t", "files-only": "f", "dirs-only": "d", "summary": "u", "list-empty": "e", "checksum": "",
                  "human": "h", "confirm": "y", "exists": "", "no-path": "", "verbose": "v", "no-verify": "k",
-                 "debug": "", "dry-run": "n", "quiet": "q", "no-colors": "", "api=": "", "credentials=": "c:", "printf=": "p:", "help": "", "version": ""}
+                 "debug": "", "dry-run": "n", "quiet": "q", "no-colors": "", "api=": "", "credentials-file=": "c:", "printf=": "p:", "help": "", "version": ""}
 
     # remove = and : in options
     quickoptsm = dict((k.replace('=',''), v.replace(':','')) for k,v in quickopts.items())
 
     # assign values to quick options
     defaults = dict(defaults, **{k: False for k in quickoptsm.keys() if k not in defaults})
-    common.options = copy.deepcopy(defaults)
+    common.options = ClientOptions(copy.deepcopy(defaults), copy.deepcopy(defaults))
 
     # handle arguments
     try:
@@ -727,7 +527,7 @@ def main(argv):
     wd = WebDAVClient(operation, common.options)
 
     if common.options['help']:
-        help(wd, operation, quickopts, defaults)
+        help(wd, operation, quickopts)
         sys.exit(0)
     elif common.options['version']:
         version()
@@ -738,25 +538,24 @@ def main(argv):
         usage()
         sys.exit(1)
 
-    # init operation
-    if wd.setargs(operation, args[1:]):
-        # load credentials
-        if not wd.credentials(common.options['credentials']):
-            sys.exit(1)
+    # init operation and credentials
+    if not wd.setargs(operation, args[1:]) or \
+       not wd.credentials(common.options['credentials-file']):
+        sys.exit(1)
 
-        # get result and print
-        res = wd.run()
+    # get result and print
+    res = wd.run()
 
-        # if there is a result, print it
-        if res:
-            if wd.request.hassuccess() and (wd.results is None or type(wd.results) is bool):
-                note("%s successful" % operation)
-            else:
-                # print out the result, could be XML data
-                sys.stdout.write(wd.results)
-                sys.stdout.flush()
+    # if there is a result, print it
+    if res:
+        if wd.request.hassuccess() and (wd.results is None or type(wd.results) is bool):
+            note("%s successful" % operation)
         else:
-            sys.exit(1)
+            # print out the result, could be XML data
+            sys.stdout.write(wd.results)
+            sys.stdout.flush()
+    else:
+        sys.exit(1)
 
 if __name__ == "__main__":
     main(sys.argv[1:])
