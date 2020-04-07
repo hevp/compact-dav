@@ -2,13 +2,6 @@
 
 import sys, inspect
 
-# default values for options
-defaults = {
-    "api": "webdav.json",
-    "credentials": "credentials.json",
-    "printf": "{date} {size:r} {path}"
-}
-
 # current options global
 options = {}
 

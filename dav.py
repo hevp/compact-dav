@@ -18,7 +18,7 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 TITLE = "CompactDAV"
 VERSION = "v1.0"
 
-class ChunkedFile(object):
+class ChunkedFile():
     """ Chunked file upload class to be used with requests package """
 
     def __init__(self, filename, chunksize=1024*1024*10):
@@ -37,7 +37,7 @@ class ChunkedFile(object):
         yield data
 
 
-class DAVRequest(object):
+class DAVRequest():
     """ WebDAV request class for WebDAV-enabled servers """
 
     SUCCESS = [200, 201, 204, 207]
@@ -53,7 +53,6 @@ class DAVRequest(object):
 
     def run(self, method, path, headers={}, params={}, data="", expectedStatus=SUCCESS, auth=None, quiet=False):
         verbose("Request data: %s" % (data[:250] if type(data) is str else type(data)))
-        verbose("Request headers: %s" % simplejson.dumps(headers))
 
         if self.options['head']:
             method = "HEAD"
@@ -68,6 +67,8 @@ class DAVRequest(object):
 
         self.request = req.prepare()
         self.success = False
+
+        verbose("Request headers: %s" % self.request.headers)
 
         # exit if dry-run
         if self.options['dry-run']:
@@ -97,12 +98,15 @@ class DAVRequest(object):
             if self.options['head']:
                 return False
 
+        debug("Response top: %s %s" % (self.response.status_code, self.response.reason))
+        verbose("Response: %s" % self.response.text)
+
         # init result
         self.result = self.response.text
 
         # if failed exit
         if self.response.status_code not in expectedStatus:
-            return self._requestfail() if not quiet else False
+            return self.result#self._requestfail() if not quiet else False
 
         # check if downloading file
         if 'Content-Disposition' in self.response.headers:
@@ -159,7 +163,7 @@ class DAVAuthRequest(DAVRequest):
         return DAVRequest.run(self, method, path, headers, params, data, expectedStatus, auth=(self.credentials["user"], self.credentials["token"]), quiet=quiet)
 
 
-class WebDAVClient(object):
+class WebDAVClient():
     """ WebDAV client class to set up requests for WebDAV-enabled servers """
 
     def __init__(self, operation, options):
@@ -169,6 +173,9 @@ class WebDAVClient(object):
         self.headers = {}
         self.operation = None
 
+        self._loadapi()
+
+    def _loadapi(self):
         # load API definition
         try:
             with open(self.options['api'], "r") as f:
@@ -195,7 +202,7 @@ class WebDAVClient(object):
                     ov["arguments"] = {"min": 1, "max": 1}
 
                 # set operation-specific option values if operation set
-                if o == operation:
+                if o == self.operation:
                     for (option, value) in ov["options"].items():
                         if not option in self.options:
                             raise Exception("invalid option %s" % option)
@@ -260,9 +267,10 @@ class WebDAVClient(object):
         """ Perform one of supported actions """
 
         # disable requests warning if quiet and verification off
-        if self.options['no-verify'] and self.options['quiet']:
+        if self.options['no-verify']:
             requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-            debug('InsecureRequestWarning disabled')
+            if self.options['quiet']:
+                debug('InsecureRequestWarning disabled')
 
         # start in root path, except if no-path option set
         self.options["source"] = self.options["root"] if not "no-path" in self.operation["options"] or not self.operation["options"]["no-path"] else ""
@@ -675,6 +683,14 @@ def help(wd, operation, options, defaults):
     print()
 
 def main(argv):
+    # default values for options
+    defaults = {
+        "api": "webdav.json",
+        "credentials": "credentials.json",
+        "printf": "{date} {size:r} {path}",
+        "timeout": 86400
+    }
+
     # define quick options, long: short
     quickopts = {"overwrite": "o", "headers": "", "head": "", "no-parse": "", "recursive": "R", "sort": "", "reverse": "r",
                  "dirs-first": "t", "files-only": "f", "dirs-only": "d", "summary": "u", "list-empty": "e", "checksum": "",
@@ -685,8 +701,8 @@ def main(argv):
     quickoptsm = dict((k.replace('=',''), v.replace(':','')) for k,v in quickopts.items())
 
     # assign values to quick options
-    common.defaults = dict(common.defaults, **{k: False for k in quickoptsm.keys() if k not in common.defaults})
-    common.options = copy.deepcopy(common.defaults)
+    defaults = dict(defaults, **{k: False for k in quickoptsm.keys() if k not in defaults})
+    common.options = copy.deepcopy(defaults)
 
     # handle arguments
     try:
@@ -711,7 +727,7 @@ def main(argv):
     wd = WebDAVClient(operation, common.options)
 
     if common.options['help']:
-        help(wd, operation, quickopts, common.defaults)
+        help(wd, operation, quickopts, defaults)
         sys.exit(0)
     elif common.options['version']:
         version()
