@@ -218,12 +218,12 @@ class WebDAVClient():
             error("api load failed: %s" % e, 1)
 
     def credentials(self, filename):
-        #try:
-        with open(os.path.abspath(filename), "r") as f:
-            text = f.read()
-        self.options["credentials"] = json.loads(text)
-        # except Exception as e:
-        #     error("credentials loading failed: %s" % e, 1)
+        try:
+            with open(os.path.abspath(filename), "r") as f:
+                text = f.read()
+            self.options["credentials"] = json.loads(text)
+        except Exception as e:
+            error("credentials loading failed: %s" % e, 1)
 
         debug("credentials file \'%s\'" % filename)
 
@@ -256,12 +256,10 @@ class WebDAVClient():
                 else:
                     self.args.append("")
 
-        # process other arguments
-        for k, v in self.defs["arguments"].items():
-            if k in ["min", "max"]:
-                continue
+        # process arguments other than min, max
+        for k, v in filter(lambda x: not x[0] in ["min", "max"], self.defs["arguments"].items()):
             # replace reference in argument value
-            self.defs["arguments"][k] = getArgumentByTagReference(v)
+            self.defs["arguments"][k] = getValueByTagReference(v, listToDict(self.args))
 
         # make sure a forward slash precedes the path
         self.options["root"] = ("/%s" % self.args[0]).replace('//', '/')
@@ -309,16 +307,18 @@ class WebDAVClient():
 
         # show results
         if len(self.results) > 0:
+            result = None
             for r in self.results:
+                debug(r)
                 if not r['scope'] == 'response':
                     continue
-                result = r.format(self.options["printf"])
+                result = r.format()
 
                 # display summary if requested
                 if self.options['summary']:
                     result += r.format_summary()
 
-            self.results = result
+            self.results = result if result else self.results
         else:
             self.results = "no results"
 
@@ -334,9 +334,7 @@ class WebDAVClient():
         # set request headers if required
         if "headers" in self.defs:
             for h, v in self.defs["headers"].items():
-                arg = getArgumentByTagReference(v)
-                val = self.options["credentials"]['hostname'] + self.options["credentials"]['endpoint'] + arg if arg else v
-                self.headers[h] = val
+                self.headers[h] = getValueByTagReference(v, listToDict(self.args), self.options)
 
         # add data to request if required
         data = ""
@@ -347,6 +345,7 @@ class WebDAVClient():
         elif "data" in self.defs:
             gen = GeneratorFactory.getGenerator(self.defs["data"], self.options)
             data = gen.generate(self.defs["data"])
+            self.headers['Content-Type'] = gen.getContentType()
 
         # run request, exits early if dry-run
         response = self.request.run(self.defs["method"], opts["source"], headers=self.headers, data=data)

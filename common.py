@@ -40,17 +40,20 @@ def relativePath(r, var, root, endpoint):
 
     return val
 
-def getArgumentByTagReference(data, v):
-    m = re.search('@([0-9]+)', v)
-    if not m:
-        return v
+def listToDict(*args):
+    return dict(zip(map(str, range(len(*args))), *args))
 
-    for g in m.groups():
-        if len(data) > int(g):
-            v = v.replace("@%s" % g, data[int(g)])
-        else:
-            error("tag reference: argument %s does not exist" % g)
-
+def getValueByTagReference(v, *args):
+    for m in re.findall('@([0-9]+)|@{([\w\.\-]+)}', v):
+        rv = m[1] if m[1] > '' else m[0]
+        rs = "@%s" % (("{%s}" % m[1]) if m[1] > '' else m[0])
+        for d in args:
+            ov = getFromDict(d, rv.split('.'))
+            if ov:
+                break
+        if ov is None:
+            error("value reference: tag %s does not exist in provided data" % rs)
+        v = v.replace(rs, str(ov)) if ov else v
     return v
 
 def message(target, msg, msgtype="", color='\x1b[0m'):

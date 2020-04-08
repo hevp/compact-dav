@@ -142,14 +142,14 @@ class ListXMLResponseParser(XMLResponseParser):
 
         return formatted
 
-    def format(self, printf):
+    def format(self):
         printResult = ""
 
         # find {<varname>:<length>}
-        matching = re.findall('{([^}:]+):?([^}]+)?}', printf)
+        matching = re.findall('{([^}:]+):?([^}]+)?}', self.options["printf"])
 
         if not matching:
-            return printf
+            return self.options["printf"]
 
         # loop through result list
         results = []
