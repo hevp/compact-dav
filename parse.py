@@ -28,10 +28,10 @@ class ParserFactory():
         return parser.run(data)
 
 class Parser(dict):
-    def __init__(self, defs, options):
+    def __init__(self, defs, options={}, result=None):
         self.update(defs)
         self.options = options
-        self.result = None
+        self.result = result
 
     def _pre(self, data):
         pass
@@ -65,9 +65,11 @@ class ResponseParser(Parser):
     pass
 
 class XMLResponseParser(ResponseParser):
+    def __init__(self, data, options={}):
+        super().__init__(data, options, [])
+
     def _pre(self, data):
         super()._pre(data)
-        self.result = []
 
     def _parse(self, data):
         super()._parse(data)
@@ -144,12 +146,13 @@ class ListXMLResponseParser(XMLResponseParser):
 
     def format(self):
         printResult = ""
+        printf = self.options.get("printf", "")
 
         # find {<varname>:<length>}
-        matching = re.findall('{([^}:]+):?([^}]+)?}', self.options["printf"])
+        matching = re.findall('{([^}:]+):?([^}]+)?}', printf)
 
         if not matching:
-            return self.options["printf"]
+            return printf
 
         # loop through result list
         results = []
