@@ -28,10 +28,10 @@ class ParserFactory():
         return parser.run(data)
 
 class Parser(dict):
-    def __init__(self, defs, options={}, result=None):
+    def __init__(self, defs, options={}, resultInit=None):
         self.update(defs)
         self.options = options
-        self.result = result
+        self.result = resultInit
 
     def _pre(self, data):
         pass
@@ -67,9 +67,6 @@ class ResponseParser(Parser):
 class XMLResponseParser(ResponseParser):
     def __init__(self, data, options={}):
         super().__init__(data, options, [])
-
-    def _pre(self, data):
-        super()._pre(data)
 
     def _parse(self, data):
         super()._parse(data)
@@ -130,19 +127,17 @@ class XMLResponseParser(ResponseParser):
             self.result.sort(key=sortkey, reverse=self.options['reverse'])
 
 class ListXMLResponseParser(XMLResponseParser):
-    def filter(self):
-        formatted = copy.deepcopy(self.result)
+    def _post(self, data):
+        super()._post(data)
 
         # filtering
         if self.options['list-empty']:
-            formatted = list(filter(lambda x: x['type'] == 'd' and x['size'] == 0, formatted))
+            self.result = list(filter(lambda x: x['type'] == 'd' and x['size'] == 0, self.result))
         # filter dirs (wins) or files
         if self.options['dirs-only']:
-            formatted = list(filter(lambda x: x['type'] == 'd', formatted))
+            self.result = list(filter(lambda x: x['type'] == 'd', self.result))
         elif self.options['files-only']:
-            formatted = list(filter(lambda x: x['type'] == 'f', formatted))
-
-        return formatted
+            self.result = list(filter(lambda x: x['type'] == 'f', self.result))
 
     def format(self):
         printResult = ""
