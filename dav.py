@@ -58,7 +58,7 @@ class DAVRequest():
         self.success = False
 
     def run(self, method, path, headers={}, params={}, data="", expectedStatus=SUCCESS, auth=None, quiet=False):
-        verbose("Request data: %s" % (data[:250] if type(data) is str else type(data)))
+        verbose("Request data: %s" % (data[:1000] if type(data) is str else type(data)))
 
         if self.options['head']:
             method = "HEAD"
@@ -132,7 +132,7 @@ class DAVRequest():
                     }
 
         # parse based on given content type
-        if 'Content-Type' in self.response.headers and not self.options['no-parse']:
+        if 'Content-Type' in self.response.headers:
             info = self.response.headers['Content-Type'].split(';')
             if info[0] == 'application/xml':
                 try:
@@ -165,7 +165,9 @@ class DAVRequest():
 
 class DAVAuthRequest(DAVRequest):
     def run(self, method, path, headers={}, params={}, data="", expectedStatus=DAVRequest.SUCCESS, quiet=False):
-        return DAVRequest.run(self, method, path, headers, params, data, expectedStatus, auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]), quiet=quiet)
+        return DAVRequest.run(self, method, path, headers, params, data, expectedStatus,
+                              auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]) if not 'Authorization' in headers else None,
+                              quiet=quiet)
 
 
 class WebDAVClient():
@@ -231,6 +233,10 @@ class WebDAVClient():
         missing = ['hostname', 'endpoint', 'user', 'token'] - self.options["credentials"].keys()
         if len(missing) > 0:
             error('missing credential elements: %s' % ", ".join(missing), 1)
+
+        self.options["credentials"]["domain"] = re.sub('https?:\/\/(.*)', '\\1', self.options["credentials"]["hostname"])
+
+        verbose(self.options["credentials"])
 
         return True
 
@@ -324,6 +330,13 @@ class WebDAVClient():
 
         return True
 
+    def setHeader(self, tag, value):
+        if type(value) is dict:
+            # conditional headers to be implemented
+            pass
+        else:
+            self.headers[tag] = getValueByTagReference(value, listToDict(self.args), self.options)
+
     def doRequest(self, options={}):
         # replace client options by local options
         opts = copy.deepcopy(self.options)
@@ -334,7 +347,7 @@ class WebDAVClient():
         # set request headers if required
         if "headers" in self.defs:
             for h, v in self.defs["headers"].items():
-                self.headers[h] = getValueByTagReference(v, listToDict(self.args), self.options)
+                self.setHeader(h, v)
 
         # add data to request if required
         data = ""
@@ -428,6 +441,17 @@ class WebDAVClient():
     def parse(self, data, options):
         return list(map(lambda p: ParserFactory.getParser(p, data, options), self.defs.get('parsing', [])))
 
+    def format(self):
+        """ Format the result of the request """
+
+        print(self.options['human'], type(self.results))
+        if self.options['human']:
+            if type(self.results) is etree._Element:
+                return etree.tostring(self.results, pretty_print=True).decode('utf-8')
+            elif type(self.results) is dict:
+                return simplejson.dumps(self.results, indent=4)
+
+        return self.results
 
 def version():
     print("%s version %s" % (TITLE, VERSION))
@@ -551,7 +575,7 @@ def main(argv):
             note("%s successful" % operation)
         else:
             # print out the result, could be XML data
-            sys.stdout.write(wd.results)
+            sys.stdout.write(wd.format())
             sys.stdout.flush()
     else:
         sys.exit(1)

@@ -52,11 +52,11 @@ def getValueByTagReference(v, *args):
             if ov:
                 break
         if ov is None:
-            error("value reference: tag %s does not exist in provided data" % rs)
+            warning("value reference: tag %s does not exist in provided data" % rs)
         v = v.replace(rs, str(ov)) if ov else v
-    return v
+    return v.replace('@@', '@')
 
-def message(target, msg, msgtype="", color='\x1b[0m'):
+def message(target, msg, msgtype="", color='\x1b[0m', ret=True):
     target.flush()
 
     frames = inspect.stack()
@@ -65,7 +65,7 @@ def message(target, msg, msgtype="", color='\x1b[0m'):
         if not options['no-colors']:
             target.write(color)
 
-        target.write('%s:\x1b[0m %s\n' % ("%% %s()" % frames[2][3] if msgtype == "" else msgtype, msg))
+        target.write('%s:\x1b[0m %s\n' % ("%% %s()" % frames[2][3] if msgtype in ["debug", "verbose"] else msgtype, msg))
 
         if not options['no-colors']:
             target.write('\x1b[0m')
@@ -74,12 +74,14 @@ def message(target, msg, msgtype="", color='\x1b[0m'):
 
     target.flush()
 
-def hint(msg):
+    return ret
+
+def hint(msg, ret=True):
     ''' Print instructions for the user '''
 
-    message(sys.stdout, msg, "hint")
+    return message(sys.stdout, msg, "hint", ret=ret)
 
-def error(msg, code=None):
+def error(msg, code=None, ret=False):
     ''' Print error and exit if required '''
 
     message(sys.stderr, msg, "error", "\x1b[31m")
@@ -87,30 +89,33 @@ def error(msg, code=None):
     if code is not None:
         sys.exit(code)
 
-    return False
+    return ret
 
-def warning(msg):
+def warning(msg, ret=False):
     ''' Print warning message'''
 
-    message(sys.stdout, msg, "warning")
+    if options['quiet']:
+        return ret
 
-def verbose(msg):
+    return message(sys.stdout, msg, "warning", color="\x1b[96m", ret=ret)
+
+def verbose(msg, ret=True):
     ''' Print verbose text '''
 
     if not options['verbose']:
-        return
+        return ret
 
-    message(sys.stdout, msg, "", '\x1b[33m')
+    return message(sys.stdout, msg, "verbose", '\x1b[33m', ret=ret)
 
-def debug(msg, force=False):
+def debug(msg, force=False, ret=True):
     ''' Print debug message'''
 
     if not options['debug'] and not force:
-        return
+        return ret
 
-    message(sys.stdout, msg, "", '\x1b[32m')
+    return message(sys.stdout, msg, "debug", '\x1b[32m', ret=ret)
 
-def note(msg):
+def note(msg, ret=True):
     ''' Print message'''
 
-    message(sys.stdout, msg, "note")
+    return message(sys.stdout, msg, "note", ret=ret)
