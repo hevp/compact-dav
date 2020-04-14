@@ -104,7 +104,7 @@ class DAVRequest():
             if self.options['head']:
                 return False
 
-        debug("Response top: %s %s" % (self.response.status_code, self.response.reason))
+        debug("Response: %s %s" % (self.response.status_code, self.response.reason))
         verbose("Response: %s" % self.response.text)
 
         # init result
@@ -146,7 +146,6 @@ class DAVRequest():
                     error("could not decode JSON data: %s" % e)
 
         self.success = True
-        debug("response: %s (%s)" % (self.response.reason, self.response.status_code))
 
         return self.result
 
