@@ -1,4 +1,8 @@
 {
+    "options": {
+        "method": "options",
+        "description": "Get available WebDAV HTTP options"
+    },
     "download": {
         "method": "get",
         "description": "Download a file",
@@ -28,32 +32,38 @@
     "list": {
         "method": "propfind",
         "description": "List properties of path",
-        "parsing": {
-            "items": "response",
-            "variables": {
-                "path": {
-                    "type": "uri",
-                    "xpath": "href"
-                },
-                "date": {
-                    "type": "date",
-                    "xpath": "propstat/prop/getlastmodified"
-                },
-                "type": {
-                    "type": "enum",
-                    "xpath": "propstat/prop/resourcetype/collection",
-                    "values": {
-                        "present": "d",
-                        "absent": "f"
+        "parsing": [
+            {
+                "scope": "response",
+                "items": "response",
+                "variables": {
+                    "path": {
+                        "type": "uri",
+                        "xpath": "href"
+                    },
+                    "date": {
+                        "type": "date",
+                        "xpath": "propstat/prop/getlastmodified"
+                    },
+                    "type": {
+                        "type": "enum",
+                        "xpath": "propstat/prop/resourcetype/collection",
+                        "values": {
+                            "present": "d",
+                            "absent": "f"
+                        }
+                    },
+                    "mimetype": {
+                        "type": "string",
+                        "xpath": "propstat/prop/getcontenttype"
+                    },
+                    "size": {
+                        "type": "int",
+                        "xpath": "propstat/prop/quota-used-bytes|propstat/prop/getcontentlength"
                     }
-                },
-                "mimetype": "propstat/prop/getcontenttype",
-                "size": {
-                    "type": "int",
-                    "xpath": "propstat/prop/quota-used-bytes|propstat/prop/getcontentlength"
                 }
             }
-        },
+        ],
         "descriptions": {
             "0": "Relative remote path of object"
         }
@@ -85,7 +95,7 @@
             "max": 2
         },
         "headers": {
-            "destination": "@1"
+            "destination": "@{root}@{endpoint}@1"
         },
         "options": {
             "exists": true
@@ -140,16 +150,64 @@
     },
     "lock": {
         "method": "lock",
-        "description": "Lock an object",
+        "description": "Lock an object with an exclusive or shared lock owned by the requestor",
         "descriptions": {
-            "0": "Relative remote path of object"
-        }
+            "0": "Relative remote path of object",
+            "shared": "Create shared lock instead of exclusive lock",
+            "timeout": "Timeout for lock"
+        },
+        "options": {
+            "shared": false,
+            "timeout": 86400
+        },
+        "headers": {
+            "Timeout": "Infinite, Second-@{timeout}",
+            "Authorization": {
+                "conditions": [{
+                    "exists": "@{credentials.nonce}"
+                }],
+                "value": "Digest username=\"@{credentials.user}\", realm=\"@{credentials.user}@@@{credentials.domain}\", uri=\"@0\", nonce=\"@{credentials.nonce}\", response=\"\", opaque=\"\""
+            }
+        },
+        "data": {
+            "root": "d:lockinfo",
+            "elements": {
+                "d:lockscope": {
+                    "d:exclusive": {}
+                },
+                "d:locktype": {
+                    "d:write": {}
+                },
+                "d:owner": {
+                    "d:href": "@{credentials.hostname}#@{credentials.user}"
+                }
+            }
+        },
+        "parsing": [
+            {
+                "scope": "headers",
+                "filter": {
+                    "tag": "Lock-token",
+                    "value": "<([^.]+)>"
+                },
+                "actions": [
+                    {
+                        "action": "store",
+                        "realm": "locks.txt",
+                        "data": "@{path}: @{filter:value}"
+                    }
+                ]
+            }
+        ]
     },
     "unlock": {
         "method": "unlock",
-        "description": "Unlock an object",
+        "description": "Remove a lock of an object owned by the requestor",
         "descriptions": {
             "0": "Relative remote path of object"
+        },
+        "headers": {
+            "Lock-token": "@locks"
         }
     },
     "report": {
@@ -161,7 +219,9 @@
         },
         "descriptions": {
             "0": "Property name",
-            "1": "Property value"
+            "1": "Property value",
+            "printf": "Format for print",
+            "no-path": "Hide path from listing"
         },
         "defaults": {
             "1": "1"
@@ -180,14 +240,16 @@
                 ]
             }
         },
-        "parsing": {
-            "items": "response",
-            "variables": {
-                "path": {
-                    "type": "uri",
-                    "xpath": "href"
+        "parsing": [
+            {
+                "scope": "response",
+                "variables": {
+                    "path": {
+                        "type": "uri",
+                        "xpath": "href"
+                    }
                 }
             }
-        }
+        ]
     }
 }
