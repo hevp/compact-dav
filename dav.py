@@ -230,11 +230,15 @@ class WebDAVClient():
         debug("credentials file \'%s\'" % filename)
 
         # credentials completeness test
-        missing = ['hostname', 'endpoint', 'user', 'token'] - self.options["credentials"].keys()
+        required = ['hostname', 'endpoint', 'user', 'token']
+        missing = required - self.options["credentials"].keys()
         if len(missing) > 0:
             error('missing credential elements: %s' % ", ".join(missing), 1)
 
         self.options["credentials"]["domain"] = re.sub('https?:\/\/(.*)', '\\1', self.options["credentials"]["hostname"])
+
+        # apply any other settings
+        self.options.update({x: self.options["credentials"][x] for x in self.options["credentials"].keys() - required})
 
         verbose(self.options["credentials"])
 
@@ -444,7 +448,6 @@ class WebDAVClient():
     def format(self):
         """ Format the result of the request """
 
-        print(self.options['human'], type(self.results))
         if self.options['human']:
             if type(self.results) is etree._Element:
                 return etree.tostring(self.results, pretty_print=True).decode('utf-8')
