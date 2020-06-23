@@ -110,9 +110,6 @@ class XMLResponseParser(ResponseParser):
             # add to results
             self.result.append(variables)
 
-        # delete first (root) element
-        del self.result[0]
-
     def _post(self, data):
         # apply sorting etc
         sortkey = None
