@@ -123,6 +123,10 @@ class XMLResponseParser(ResponseParser):
         if sortkey is not None:
             self.result.sort(key=sortkey, reverse=self.options['reverse'])
 
+        if self.options['hide-root'] and len(self.result):
+            self.result = self.result[1:]
+
+
 class ListXMLResponseParser(XMLResponseParser):
     def _post(self, data):
         super()._post(data)

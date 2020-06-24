@@ -33,7 +33,7 @@ def relativePath(r, var, root, endpoint):
 
     # add leading slash
     sp = val.split('/')
-    if 'type' in r and r['type'] == 'd':
+    if 'type' in r and r['type'] == 'd' and len(sp) > 1:
         val = "/" + sp[-2]
     elif len(sp) > 1:
         val = "/".join(sp[1:])

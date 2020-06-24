@@ -132,7 +132,7 @@ class DAVRequest():
                     }
 
         # parse based on given content type
-        if 'Content-Type' in self.response.headers:
+        if 'Content-Type' in self.response.headers and not self.options['no-parse']:
             info = self.response.headers['Content-Type'].split(';')
             if info[0] == 'application/xml':
                 try:
@@ -318,7 +318,6 @@ class WebDAVClient():
         if len(self.results) > 0:
             result = None
             for r in self.results:
-                debug(r)
                 if not r['scope'] == 'response':
                     continue
                 result = r.format()
@@ -519,7 +518,7 @@ def main(argv):
     # define quick options, long: short
     quickopts = {"overwrite": "o", "headers": "", "head": "", "no-parse": "", "recursive": "R", "sort": "", "reverse": "r",
                  "dirs-first": "t", "files-only": "f", "dirs-only": "d", "summary": "u", "list-empty": "e", "checksum": "",
-                 "human": "h", "confirm": "y", "exists": "", "no-path": "", "verbose": "v", "no-verify": "k",
+                 "human": "h", "confirm": "y", "exists": "", "no-path": "", "verbose": "v", "no-verify": "k", "hide-root": "",
                  "debug": "", "dry-run": "n", "quiet": "q", "no-colors": "", "api=": "", "credentials-file=": "c:", "printf=": "p:", "help": "", "version": ""}
 
     # remove = and : in options
