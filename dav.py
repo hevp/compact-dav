@@ -119,14 +119,14 @@ class DAVRequest():
         # check if downloading file
         if 'Content-Disposition' in self.response.headers:
             # extract filename
-            m = re.match("attachment;.+filename=\"([^\"]+)\"", self.response.headers['Content-Disposition'])
+            m = re.match(r'attachment;.+filename="([^"]+)"', self.response.headers['Content-Disposition'])
             if not m:
                 error("invalid response header disposition value: %s" % self.response.headers['Content-Disposition'], 1)
             else:
                 self.download['filename'] = m.group(1)
             # extract checksum if available
             if 'OC-Checksum' in self.response.headers:
-                m = re.match("^([^:]+):([0-9a-f]+)$", self.response.headers['OC-Checksum'])
+                m = re.match(r'^([^:]+):([0-9a-f]+)$', self.response.headers['OC-Checksum'])
                 if m:
                     self.download['checksum'] = {
                         'algorithm': m.group(1),
@@ -236,7 +236,7 @@ class WebDAVClient():
         if len(missing) > 0:
             error('missing credential elements: %s' % ", ".join(missing), 1)
 
-        self.options["credentials"]["domain"] = re.sub('https?://(.*)', '\\1', self.options["credentials"]["hostname"])
+        self.options["credentials"]["domain"] = re.sub(r'https?://(.*)', '\\1', self.options["credentials"]["hostname"])
 
         # apply any other settings
         self.options.update({x: self.options["credentials"][x] for x in self.options["credentials"].keys() - required})
@@ -368,9 +368,8 @@ class WebDAVClient():
         response = self.request.run(self.defs["method"], opts["source"], headers=self.headers, data=data)
 
         # return if failed
-        if not self.request.hassuccess() or not response:
-            print("TEST")
-            return False
+        if not self.request.hassuccess() or response is None:
+            return error(f"{self.request.response.status_code} {self.request.response.reason}")
 
         # exit if dry-run
         if opts['dry-run']:

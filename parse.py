@@ -2,10 +2,14 @@
     Author: hevp
 """
 
-from common import *
+import re
 import copy
+
 from lxml import etree
 from dateutil.parser import parse as dateparse
+
+from common import makeHuman, relativePath
+
 
 class ParserFactory():
     @staticmethod
@@ -21,11 +25,12 @@ class ParserFactory():
             elif type(data) is dict:
                 parser = JSONResponseParser(p, options)
             else:
-                parse = ResponseParser(p, options)
+                parser = ResponseParser(p, options)
         else:
             parser = Parser(p, options)
 
         return parser.run(data)
+
 
 class Parser(dict):
     def __init__(self, defs, options={}, resultInit=None):
@@ -58,11 +63,14 @@ class Parser(dict):
     def format(self):
         return copy.deepcopy(self.result)
 
+
 class HeadersParser(Parser):
     pass
 
+
 class ResponseParser(Parser):
     pass
+
 
 class XMLResponseParser(ResponseParser):
     def __init__(self, data, options={}):
@@ -71,7 +79,7 @@ class XMLResponseParser(ResponseParser):
     def _parse(self, data):
         super()._parse(data)
         # get XML namespace map, excluding default namespace
-        nsmap = {k:v for k,v in data.nsmap.items() if k}
+        nsmap = {k: v for k, v in data.nsmap.items() if k}
 
         # process result elements
         for child in data.findall(".//d:%s" % self["items"], nsmap):
@@ -112,16 +120,12 @@ class XMLResponseParser(ResponseParser):
 
     def _post(self, data):
         # apply sorting etc
-        sortkey = None
         if self.options['sort'] and self.options['dirs-first']:
-            sortkey = lambda x: x['type'] + x['path'].lower()
+            self.result.sort(key=lambda x: x['type'] + x['path'].lower(), reverse=self.options['reverse'])
         elif self.options['sort']:
-            sortkey = lambda x: x['path'].lower()
+            self.result.sort(key=lambda x: x['path'].lower(), reverse=self.options['reverse'])
         elif self.options['dirs-first']:
-            sortkey = lambda x: x['type']
-
-        if sortkey is not None:
-            self.result.sort(key=sortkey, reverse=self.options['reverse'])
+            self.result.sort(key=lambda x: x['type'], reverse=self.options['reverse'])
 
         if self.options['hide-root'] and len(self.result):
             self.result = self.result[1:]
@@ -145,7 +149,7 @@ class ListXMLResponseParser(XMLResponseParser):
         printf = self.options.get("printf", "")
 
         # find {<varname>:<length>}
-        matching = re.findall('{([^}:]+):?([^}]+)?}', printf)
+        matching = re.findall(r'{([^}:]+):?([^}]+)?}', printf)
 
         if not matching:
             return printf
@@ -205,7 +209,7 @@ class ListXMLResponseParser(XMLResponseParser):
                         val = ("%" + maxs[var[0]] + "s") % val
 
                 # replace variable with value
-                text = text.replace("{%s}" % ":".join(filter(lambda x: x>'', list(var))), val)
+                text = text.replace("{%s}" % ":".join(filter(lambda x: x > '', list(var))), val)
 
             # print resulting string
             printResult += "%s\n" % text

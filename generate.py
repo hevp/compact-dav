@@ -2,9 +2,9 @@
     Author: hevp
 """
 
-import re
 from lxml import etree
-from common import *
+from common import error, getValueByTagReference
+
 
 class GeneratorFactory():
     @staticmethod
@@ -43,9 +43,9 @@ class XMLGenerator(Generator):
                 if type(v) is dict:
                     self.generate(v, sub)
                 elif type(v) is list:
-                    for l in v:
-                        lk = getValueByTagReference(l.keys()[0], self.data)
-                        lv = getValueByTagReference(l.values()[0], self.data)
+                    for value in v:
+                        lk = getValueByTagReference(value.keys()[0], self.data)
+                        lv = getValueByTagReference(value.values()[0], self.data)
                         prop = etree.SubElement(sub, self._getXMLTag(lk, NSMAP), nsmap=NSMAP)
                         prop.text = getValueByTagReference(lv, self.data)
                 else:
