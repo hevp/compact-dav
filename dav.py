@@ -369,6 +369,7 @@ class WebDAVClient():
 
         # return if failed
         if not self.request.hassuccess() or not response:
+            print("TEST")
             return False
 
         # exit if dry-run
