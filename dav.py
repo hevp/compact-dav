@@ -4,17 +4,19 @@
     Author: hevp
 
     Requires: Python 3
-    Packages: see below
+    Packages: see requirements.txt
 """
 
 import sys, getopt, os, requests, json, cchardet, simplejson, copy, re
+
+from lxml import etree
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
 import common
 from common import debug, error, verbose, warning, note, getValueByTagReference, listToDict
 from parse import ParserFactory
 from generate import GeneratorFactory
 
-from lxml import etree
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 TITLE = "CompactDAV"
 VERSION = "1.1"
