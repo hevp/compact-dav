@@ -9,9 +9,9 @@
 
 import sys, getopt, os, requests, json, cchardet, simplejson, copy, re
 import common
-from common import *
-from parse import *
-from generate import *
+from common import debug, error, verbose, warning, note, getValueByTagReference, listToDict
+from parse import ParserFactory
+from generate import GeneratorFactory
 
 from lxml import etree
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -19,11 +19,13 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 TITLE = "CompactDAV"
 VERSION = "1.1"
 
+
 class ClientOptions(dict):
     def __init__(self, options, defaults):
         self.update(options)
         self["defaults"] = defaults
         self["credentials"] = None
+
 
 class ChunkedFile():
     """ Chunked file upload class to be used with requests package """
@@ -89,7 +91,7 @@ class DAVRequest():
         try:
             s = requests.Session()
             self.response = s.send(self.request, verify=not self.options['no-verify'], timeout=30)
-        except requests.exceptions.ReadTimeout as e:
+        except requests.exceptions.ReadTimeout:
             error("request time out after 30 seconds", 2)
         except requests.exceptions.SSLError as e:
             error(e, 2)
@@ -112,7 +114,7 @@ class DAVRequest():
 
         # if failed exit
         if self.response.status_code not in expectedStatus:
-            return self.result#self._requestfail() if not quiet else False
+            return self.result  # self._requestfail() if not quiet else False
 
         # check if downloading file
         if 'Content-Disposition' in self.response.headers:
@@ -156,7 +158,7 @@ class DAVRequest():
         message = ""
         if self.response.status_code >= 400 and self.response.status_code < 500:
             if isinstance(self.result, etree._Element):
-                nsmap = {k:v for k,v in self.result.nsmap.items() if k}
+                nsmap = {k: v for k, v in self.result.nsmap.items() if k}
                 message = self.result.find('.//s:message', nsmap).text
 
         return error('%s (%s)%s' % (self.response.reason, self.response.status_code, ": %s" % message if message > "" else ""))
@@ -165,7 +167,7 @@ class DAVRequest():
 class DAVAuthRequest(DAVRequest):
     def run(self, method, path, headers={}, params={}, data="", expectedStatus=DAVRequest.SUCCESS, quiet=False):
         return DAVRequest.run(self, method, path, headers, params, data, expectedStatus,
-                              auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]) if not 'Authorization' in headers else None,
+                              auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]) if 'Authorization' not in headers else None,
                               quiet=quiet)
 
 
@@ -202,15 +204,15 @@ class WebDAVClient():
                             ov["parsing"]["variables"][k] = {"xpath": v}
 
                 # ensure options and arguments
-                if not "options" in ov:
+                if "options" not in ov:
                     ov["options"] = {}
-                if not "arguments" in ov:
+                if "arguments" not in ov:
                     ov["arguments"] = {"min": 1, "max": 1}
 
                 # set operation-specific option values if operation set
                 if o == self.operation:
                     for (option, value) in ov["options"].items():
-                        if not option in self.options:
+                        if option not in self.options:
                             raise Exception("invalid option %s" % option)
                         # alter only if set application option does not differs from default
                         if self.options[option] == self.options["defaults"][option]:
@@ -234,7 +236,7 @@ class WebDAVClient():
         if len(missing) > 0:
             error('missing credential elements: %s' % ", ".join(missing), 1)
 
-        self.options["credentials"]["domain"] = re.sub('https?:\/\/(.*)', '\\1', self.options["credentials"]["hostname"])
+        self.options["credentials"]["domain"] = re.sub('https?://(.*)', '\\1', self.options["credentials"]["hostname"])
 
         # apply any other settings
         self.options.update({x: self.options["credentials"][x] for x in self.options["credentials"].keys() - required})
@@ -286,7 +288,7 @@ class WebDAVClient():
                 debug('InsecureRequestWarning disabled')
 
         # start in root path, except if no-path option set
-        self.options["source"] = self.options["root"] if not "no-path" in self.defs["options"] or not self.defs["options"]["no-path"] else ""
+        self.options["source"] = self.options["root"] if "no-path" not in self.defs["options"] or not self.defs["options"]["no-path"] else ""
 
         # check operation requirements
         if not self.exists() or not self.confirm():
@@ -296,7 +298,7 @@ class WebDAVClient():
         self.results = self.doRequest(self.options)
 
         # if boolean false, return
-        if self.results == False:
+        if not self.results:
             return False
 
         # if downloading file and target has been defined
@@ -311,7 +313,7 @@ class WebDAVClient():
             self.results = True
 
         # return immediately if no parsing requested
-        if not "parsing" in self.defs or self.options['no-parse']:
+        if "parsing" not in self.defs or self.options['no-parse']:
             return True
 
         # show results
@@ -366,7 +368,7 @@ class WebDAVClient():
         response = self.request.run(self.defs["method"], opts["source"], headers=self.headers, data=data)
 
         # return if failed
-        if not self.request.hassuccess() or response == False:
+        if not self.request.hassuccess() or not response:
             return False
 
         # exit if dry-run
@@ -374,7 +376,7 @@ class WebDAVClient():
             return False
 
         # return immediately without response if no parsing defined
-        if "parsing" not in self.defs and not "filename" in self.request.download:
+        if "parsing" not in self.defs and "filename" not in self.request.download:
             return True
         # return immediately if no parsing requested
         if opts['no-parse'] or "filename" in self.request.download:
@@ -386,30 +388,30 @@ class WebDAVClient():
         # recursive processing
         if self.options['recursive']:
             recursiveresults = []
-            for l in [r for r in results if r['scope'] == 'response']:
-                if l['type'] == 'd':
-                    recursiveresults += self.doRequest({"source": "%s%s" % (self.options["source"], self.getRelativePath(l, "path"))})
+            for res in [r for r in results if r['scope'] == 'response']:
+                if res['type'] == 'd':
+                    recursiveresults += self.doRequest({"source": "%s%s" % (self.options["source"], self.getRelativePath(res, "path"))})
             results += recursiveresults
 
         return results
 
     def exists(self):
-        if not "exists" in self.defs["options"] or not self.defs["options"]["exists"]:
+        if "exists" not in self.defs["options"] or not self.defs["options"]["exists"]:
             return True
 
         req = DAVAuthRequest(self.options)
 
         # check if the source path exists
-        res = req.run("propfind", self.options["source"], quiet=True)
+        req.run("propfind", self.options["source"], quiet=True)
 
-        if not req.response.status_code in DAVRequest.SUCCESS:
+        if req.response.status_code not in DAVRequest.SUCCESS:
             return error("cannot %s: source path %s does not exist" % (self.defs["method"], self.options["source"]))
 
         if self.args[1] == "":
             return True
 
         # check if the target path does not exists
-        res = req.run("propfind", self.options["target"], quiet=True)
+        req.run("propfind", self.options["target"], quiet=True)
 
         if req.response.status_code in DAVRequest.SUCCESS:
             if not self.options['overwrite']:
@@ -420,7 +422,7 @@ class WebDAVClient():
         return True
 
     def confirm(self):
-        if not "confirm" in self.defs["options"] or not self.defs["options"]["confirm"]:
+        if "confirm" not in self.defs["options"] or not self.defs["options"]["confirm"]:
             return True
 
         text = "Are you sure you want to %s %s%s (y/n/all/c)? " % (self.defs["method"],
@@ -454,11 +456,14 @@ class WebDAVClient():
 
         return self.results
 
+
 def version():
     print("%s version %s" % (TITLE, VERSION))
 
+
 def usage():
     print("usage: dav.py <operation> <options> <args..>")
+
 
 def help(wd, operation, quickopts):
     if operation == "" or operation not in wd.api.keys():
@@ -479,9 +484,9 @@ def help(wd, operation, quickopts):
         for k, v in quickopts.items():
             kr = k.replace('=', '')
             print(("%s --%-" + maxopk + "s  %s %s") % ("-%s " % v[0] if v else "   ",
-                                                      kr,
-                                                      ("%s %-" + maxopk + "s") % ("Enable" if kr == k else "Set", kr if kr in wd.options["defaults"].keys() else " " * (int(maxopk) + 7)),
-                                                      "%s(default: '%s')" % ("" if kr == k else " " * 3, wd.options["defaults"][kr] if kr in wd.options["defaults"].keys() else "")))
+                  kr,
+                  ("%s %-" + maxopk + "s") % ("Enable" if kr == k else "Set", kr if kr in wd.options["defaults"].keys() else " " * (int(maxopk) + 7)),
+                  "%s(default: '%s')" % ("" if kr == k else " " * 3, wd.options["defaults"][kr] if kr in wd.options["defaults"].keys() else "")))
     else:
         # determine required and optional arguments for operation
         args = ""
@@ -495,16 +500,17 @@ def help(wd, operation, quickopts):
         # print description per argument
         if 'descriptions' in wd.api[operation]:
             print("\nArguments:")
-            for a,d in filter(lambda x: x[0].isdigit(), wd.api[operation]['descriptions'].items()):
+            for a, d in filter(lambda x: x[0].isdigit(), wd.api[operation]['descriptions'].items()):
                 print("  %s: %s" % (int(a) + 1, d))
             if len(wd.api[operation]['options']):
                 print("\nOptions:")
                 maxopk = str(max(map(lambda x: len(x), wd.api[operation]['descriptions'].keys())))
                 maxopv = str(max(map(lambda x: len(x), wd.api[operation]['descriptions'].values())))
-                for a,d in filter(lambda x: not x[0].isdigit(), wd.api[operation]['descriptions'].items()):
+                for a, d in filter(lambda x: not x[0].isdigit(), wd.api[operation]['descriptions'].items()):
                     print(("  --%-" + maxopk + "s  %-" + maxopv + "s  (default: '%s')") % (a, d, wd.options[a]))
 
     print()
+
 
 def main(argv):
     # default values for options
@@ -522,7 +528,7 @@ def main(argv):
                  "debug": "", "dry-run": "n", "quiet": "q", "no-colors": "", "api=": "", "credentials-file=": "c:", "printf=": "p:", "help": "", "version": ""}
 
     # remove = and : in options
-    quickoptsm = dict((k.replace('=',''), v.replace(':','')) for k,v in quickopts.items())
+    quickoptsm = dict((k.replace('=', ''), v.replace(':', '')) for k, v in quickopts.items())
 
     # assign values to quick options
     defaults = dict(defaults, **{k: False for k in quickoptsm.keys() if k not in defaults})
@@ -544,7 +550,7 @@ def main(argv):
         if opt[2:] in quickoptsm.keys():
             common.options[opt[2:]] = arg if arg > "" else True
         elif opt[1:] in quickoptsm.values():
-            index = [k for k,v in quickoptsm.items() if v == opt[1:]][0]
+            index = [k for k, v in quickoptsm.items() if v == opt[1:]][0]
             common.options[index] = arg if arg > "" else True
 
     # create object and read credentials
@@ -580,6 +586,7 @@ def main(argv):
             sys.stdout.flush()
     else:
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])
