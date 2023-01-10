@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.10
 
 """ Compact OwnCloud/NextCloud WebDAV client
     Author: hevp
@@ -576,7 +576,14 @@ def main(argv):
         sys.exit(1)
 
     # get result and print
-    res = wd.run()
+    if common.options['debug']:
+        res = wd.run()
+    else:
+        try:
+            res = wd.run()
+        except Exception as e:
+            print(f"error: {e}")
+            sys.exit()
 
     # if there is a result, print it
     if res:
