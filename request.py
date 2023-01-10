@@ -19,7 +19,7 @@ class DAVRequest():
         self.download = {}
         self.success = False
 
-    def run(self, method, path, headers={}, params={}, data="", expectedStatus=SUCCESS, auth=None, quiet=False):
+    def run(self, method, path, headers={}, params={}, data="", expectedStatus=SUCCESS, auth=None):
         verbose("Request data: %s" % (data[:1000] if type(data) is str else type(data)))
 
         if self.options['head']:
@@ -62,12 +62,12 @@ class DAVRequest():
 
         # print headers, exit if only head request
         if self.options['headers'] or self.options['head']:
-            debug("Response headers: %s" % self.response.headers, True)
+            debug(f"Response headers: {self.response.headers}", True)
             if self.options['head']:
                 return False
 
-        debug("Response: %s %s" % (self.response.status_code, self.response.reason))
-        verbose("Response: %s" % self.response.text)
+        debug(f"Response: {self.response.status_code} {self.response.reason}")
+        verbose(f"Response: {self.response.text}")
 
         # init result
         self.result = self.response.text
@@ -100,12 +100,12 @@ class DAVRequest():
                 try:
                     self.result = etree.fromstring(self.result.encode('ascii'))
                 except Exception as e:
-                    error("could not decode XML data: %s" % e)
+                    error(f"could not decode XML data: {e}")
             elif info[0] == 'application/json':
                 try:
                     self.result = simplejson.loads(self.result)
                 except Exception as e:
-                    error("could not decode JSON data: %s" % e)
+                    error(f"could not decode JSON data: {e}")
 
         self.success = True
 

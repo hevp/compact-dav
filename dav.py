@@ -69,7 +69,7 @@ def help(wd, operation, quickopts):
         if 'descriptions' in wd.api[operation]:
             print("\nArguments:")
             for a, d in filter(lambda x: x[0].isdigit(), wd.api[operation]['descriptions'].items()):
-                print("  %s: %s" % (int(a) + 1, d))
+                print(f"  {int(a) + 1}: {d}")
             if len(wd.api[operation]['options']):
                 print("\nOptions:")
                 maxopk = str(max(map(lambda x: len(x), wd.api[operation]['descriptions'].keys())))
@@ -122,7 +122,7 @@ def main(argv):
             common.options[index] = arg if arg > "" else True
 
     # create object and read credentials
-    wd = WebDAVClient(operation, common.options)
+    wd = WebDAVClient(common.options)
 
     if common.options['help']:
         help(wd, operation, quickopts)

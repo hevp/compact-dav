@@ -51,6 +51,6 @@ class XMLGenerator(Generator):
                 else:
                     sub.text = getValueByTagReference(v, self.data)
         except Exception as e:
-            error("XML generation failed: %s " % e, 1)
+            error(f"XML generation failed: {e} ", 1)
 
         return etree.tostring(xml).decode('utf-8')

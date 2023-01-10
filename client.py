@@ -34,7 +34,7 @@ class ChunkedFile():
 class WebDAVClient():
     """ WebDAV client class to set up requests for WebDAV-enabled servers """
 
-    def __init__(self, operation, options):
+    def __init__(self, options):
         self.args = {}
         self.results = None
         self.options = options
@@ -55,7 +55,7 @@ class WebDAVClient():
                 # operation definition completeness test
                 missing = ['method', 'description'] - ov.keys()
                 if len(missing) > 0:
-                    error('missing definition elements for operation \'%s\': \'%s\'' % (o, "\', \'".join(missing)), 1)
+                    error("missing definition elements for operation '{o}': '%s'" % "\', \'".join(missing), 1)
 
                 # parsing
                 if "parsing" in ov and "variables" in ov["parsing"]:
@@ -73,12 +73,12 @@ class WebDAVClient():
                 if o == self.operation:
                     for (option, value) in ov["options"].items():
                         if option not in self.options:
-                            raise Exception("invalid option %s" % option)
+                            raise Exception(f"invalid option {option}")
                         # alter only if set application option does not differs from default
                         if self.options[option] == self.options["defaults"][option]:
                             self.options[option] = value
         except Exception as e:
-            error("api load failed: %s" % e, 1)
+            error(f"api load failed: {e}", 1)
 
     def credentials(self, filename):
         try:
@@ -86,9 +86,9 @@ class WebDAVClient():
                 text = f.read()
             self.options["credentials"] = simplejson.loads(text)
         except Exception as e:
-            error("credentials loading failed: %s" % e, 1)
+            error(f"credentials loading failed: {e}", 1)
 
-        debug("credentials file \'%s\'" % filename)
+        debug(f"credentials file '{filename}'")
 
         # credentials completeness test
         required = ['hostname', 'endpoint', 'user', 'token']
@@ -108,7 +108,7 @@ class WebDAVClient():
     def setargs(self, operation, args):
         # check if valid operation
         if operation not in self.api.keys():
-            error("unknown operation \'%s\'" % operation, 1)
+            error(f"unknown operation '{operation}'", 1)
 
         # copy arguments
         self.options["operation"] = operation
@@ -133,7 +133,7 @@ class WebDAVClient():
             self.defs["arguments"][k] = getValueByTagReference(v, listToDict(self.args))
 
         # make sure a forward slash precedes the path
-        self.options["root"] = ("/%s" % self.args[0]).replace('//', '/')
+        self.options["root"] = (f"/{self.args[0]}").replace('//', '/')
         self.options["target"] = ("/%s" % (self.args[1] if len(self.args) > 1 else "")).replace('//', '/')
 
         return True
@@ -165,7 +165,7 @@ class WebDAVClient():
         if "target" in self.defs["arguments"] and self.defs["arguments"]["target"] > "":
             try:
                 if os.path.exists(self.defs["arguments"]["target"]) and not self.options["overwrite"]:
-                    error("target file %s already exists" % self.defs["arguments"]["target"], 1)
+                    error(f"target file {self.defs['arguments']['target']} already exists", 1)
                 with open(self.defs["arguments"]["target"], "wb") as f:
                     f.write(self.results.encode('utf-8'))
             except Exception as e:
@@ -265,7 +265,7 @@ class WebDAVClient():
         req.run("propfind", self.options["source"], quiet=True)
 
         if req.response.status_code not in DAVRequest.SUCCESS:
-            return error("cannot %s: source path %s does not exist" % (self.defs["method"], self.options["source"]))
+            return error(f"cannot {self.defs['method']}: source path {self.options['source']} does not exist")
 
         if self.args[1] == "":
             return True
@@ -275,7 +275,7 @@ class WebDAVClient():
 
         if req.response.status_code in DAVRequest.SUCCESS:
             if not self.options['overwrite']:
-                return error("cannot %s: target path %s already exists" % (self.defs["method"], self.options["target"]))
+                return error(f"cannot {self.defs['method']}: target path {self.options['target']} already exists")
             else:
                 self.headers['Overwrite'] = 'T'
 
