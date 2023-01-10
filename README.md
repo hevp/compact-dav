@@ -11,6 +11,15 @@ A simple and compact WebDAV client written in Python 3.
 - Python 3.6+
 - Various packages, including `requests`
 
+### Installation
+Optionally, create a separate virtual environment and activate it.
+
+Install the packages using the `requirements.txt` file:
+
+```sh
+pip3 install -r requirements
+```
+
 ### Configuration
 You need a configuration file in JSON format in order to allow the client to contact your WebDAV server. It must contain the following elements:
 
