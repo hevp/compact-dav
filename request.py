@@ -19,7 +19,7 @@ class DAVRequest():
         self.download = {}
         self.success = False
 
-    def run(self, method, path, headers={}, params={}, data="", expectedStatus=SUCCESS, auth=None):
+    def run(self, method, path, headers={}, params={}, data="", expectedStatus=SUCCESS, auth=None, quiet=False):
         verbose("Request data: %s" % (data[:1000] if type(data) is str else type(data)))
 
         if self.options['head']:
@@ -96,12 +96,12 @@ class DAVRequest():
         # parse based on given content type
         if 'Content-Type' in self.response.headers and not self.options['no-parse']:
             info = self.response.headers['Content-Type'].split(';')
-            if info[0] == 'application/xml':
+            if info[0] in ['application/xml', 'text/xml']:
                 try:
                     self.result = etree.fromstring(self.result.encode('ascii'))
                 except Exception as e:
                     error(f"could not decode XML data: {e}")
-            elif info[0] == 'application/json':
+            elif info[0] in ['application/json', 'text/json']:
                 try:
                     self.result = simplejson.loads(self.result)
                 except Exception as e:
@@ -125,6 +125,7 @@ class DAVRequest():
 
 
 class DAVAuthRequest(DAVRequest):
-    def run(self, method, path, headers={}, params={}, data="", expectedStatus=DAVRequest.SUCCESS):
+    def run(self, method, path, headers={}, params={}, data="", expectedStatus=DAVRequest.SUCCESS, quiet=False):
         return DAVRequest.run(self, method, path, headers, params, data, expectedStatus,
-                              auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]) if 'Authorization' not in headers else None)
+                              auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]) if 'Authorization' not in headers else None,
+                              quiet=quiet)

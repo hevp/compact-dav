@@ -152,8 +152,8 @@ def main(argv):
             sys.exit()
 
     # if there is a result, print it
-    if res:
-        if wd.request.hassuccess() and (wd.results is None or type(wd.results) is bool):
+    if res and wd.request.hassuccess():
+        if wd.results is None or type(wd.results) is bool:
             note("%s successful" % operation)
         else:
             # print out the result, could be XML data

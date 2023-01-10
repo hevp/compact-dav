@@ -310,8 +310,8 @@ class WebDAVClient():
 
         if self.options['human']:
             if type(self.results) is etree._Element:
-                return etree.tostring(self.results, pretty_print=True).decode('utf-8')
+                return etree.tostring(self.results).decode('utf-8')
             elif type(self.results) is dict:
-                return simplejson.dumps(self.results, indent=4)
+                return simplejson.dumps(self.results)
 
-        return self.results
+        return self.results if self.results is str else f"{self.results}"

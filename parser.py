@@ -80,20 +80,23 @@ class XMLResponseParser(ResponseParser):
         super()._parse(data)
         # get XML namespace map, excluding default namespace
         nsmap = {k: v for k, v in data.nsmap.items() if k}
+        # get main namespace from root element
+        ns = data.prefix
 
         # process result elements
-        for child in data.findall(".//d:%s" % self["items"], nsmap):
+        for child in data.findall(f".//{ns}:{self['items']}", nsmap):
             variables = {}
+
             for var, varv in self["variables"].items():
                 for paths in varv["xpath"].split('|'):
                     if var in variables:
                         break
 
-                    p = ".//d:" + "/d:".join(paths.split('/'))
+                    p = f".//{ns}:" + f"/{ns}:".join(paths.split('/'))
                     v = child.find(p, nsmap)
 
                     # note: booleans are stored invertedly due to sorting algorithm
-                    if v is not None and (var not in variables or variables[var] is None):
+                    if v is not None:
                         if "type" in varv and varv["type"] == "bool":
                             variables[var] = "0"
                         elif "type" in varv and varv["type"] == "enum":
@@ -175,7 +178,7 @@ class ListXMLResponseParser(XMLResponseParser):
                     elif var[0] == "size":
                         val = makeHuman(val)
                 else:
-                    val = "<error>"
+                    val = None
 
                 # update temporary result array with sanity check
                 result[var[0]] = val if val else ""

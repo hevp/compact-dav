@@ -32,6 +32,9 @@
     "list": {
         "method": "propfind",
         "description": "List properties of path",
+        "headers": {
+            "Depth": "1"
+        },
         "parsing": [
             {
                 "scope": "response",
