@@ -125,7 +125,6 @@ class DAVRequest():
 
 
 class DAVAuthRequest(DAVRequest):
-    def run(self, method, path, headers={}, params={}, data="", expectedStatus=DAVRequest.SUCCESS, quiet=False):
+    def run(self, method, path, headers={}, params={}, data="", expectedStatus=DAVRequest.SUCCESS):
         return DAVRequest.run(self, method, path, headers, params, data, expectedStatus,
-                              auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]) if 'Authorization' not in headers else None,
-                              quiet=quiet)
+                              auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]) if 'Authorization' not in headers else None)

@@ -5,7 +5,7 @@ import requests
 import simplejson
 
 from lxml import etree
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from urllib3.exceptions import InsecureRequestWarning
 
 from common import error, debug, verbose, getValueByTagReference, listToDict
 from generator import GeneratorFactory
