@@ -1,5 +1,5 @@
-cchardet==2.1.7
-lxml>=4.9.1
-python_dateutil==2.8.2
-requests==2.25.1
-simplejson==3.16.0
+cchardet>=2
+lxml>=4
+python_dateutil>=2
+requests>=2
+simplejson>=3
