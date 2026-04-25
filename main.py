@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""Compact OwnCloud/NextCloud WebDAV client
+   Author: hevp
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import sys
+import simplejson
+
+from client import WebDAVClient
+import common
+from common import error, note
+
+def _load_api(path: str) -> dict:
+    try:
+        with open(path) as f:
+            return simplejson.load(f)
+    except Exception as e:
+        error(f"api load failed: {e}", 1)
+
+
+def _build_parser(api: dict) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="dav.py",
+        description=f"CompactDAV — OwnCloud/NextCloud WebDAV client",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--version", action="version", version=f"CompactDAV 1.2")
+
+    infra = parser.add_argument_group("infrastructure")
+    infra.add_argument("--api", default="webdav.json", metavar="FILE",
+                       help="API definition file (default: %(default)s)")
+    infra.add_argument("--credentials-file", "-c", default="credentials.json", metavar="FILE",
+                       help="Credentials JSON file (default: %(default)s)")
+
+    out = parser.add_argument_group("output")
+    out.add_argument("--printf", "-p", default="{date} {size:r} {path}", metavar="FORMAT",
+                     help="Output format string (default: %(default)r)")
+    # Note: -h is reserved by argparse for --help; original used -h for --human
+    out.add_argument("--human", "-H", action="store_true", help="Human-readable file sizes")
+    out.add_argument("--summary", "-u", action="store_true", help="Append size/count summary")
+    out.add_argument("--no-colors", action="store_true", help="Disable ANSI colour output")
+    out.add_argument("--no-parse", action="store_true", help="Skip response parsing")
+    out.add_argument("--hide-root", action="store_true", help="Omit the root entry from listings")
+    out.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    out.add_argument("--debug", action="store_true", help="Debug output")
+    out.add_argument("--quiet", "-q", action="store_true", help="Suppress non-error output")
+
+    req = parser.add_argument_group("request")
+    req.add_argument("--dry-run", "-n", action="store_true",
+                     help="Print the request without executing it")
+    req.add_argument("--no-verify", "-k", action="store_true",
+                     help="Disable SSL certificate verification")
+    req.add_argument("--overwrite", "-o", action="store_true",
+                     help="Overwrite an existing target")
+    req.add_argument("--confirm", "-y", action="store_true",
+                     help="Prompt before destructive operations")
+    req.add_argument("--exists", action="store_true",
+                     help="Verify source/target existence before the operation")
+    req.add_argument("--timeout", type=int, default=86400, metavar="SECONDS",
+                     help="Request timeout in seconds (default: %(default)s)")
+    req.add_argument("--checksum", action="store_true", help="Display file checksum on download")
+    req.add_argument("--headers", action="store_true", help="Print response headers")
+    req.add_argument("--head", action="store_true", help="Issue a HEAD request only")
+
+    flt = parser.add_argument_group("listing and filtering")
+    flt.add_argument("--recursive", "-R", action="store_true", help="Recurse into subdirectories")
+    flt.add_argument("--sort", action="store_true", help="Sort results by path")
+    flt.add_argument("--reverse", "-r", action="store_true", help="Reverse sort order")
+    flt.add_argument("--dirs-first", "-t", action="store_true", help="List directories before files")
+    flt.add_argument("--files-only", "-f", action="store_true", help="Show files only")
+    flt.add_argument("--dirs-only", "-d", action="store_true", help="Show directories only")
+    flt.add_argument("--list-empty", "-e", action="store_true", help="Show only empty directories")
+    flt.add_argument("--no-path", action="store_true", help="Omit paths from output")
+
+    subs = parser.add_subparsers(
+        dest="operation",
+        metavar="OPERATION",
+        title="operations",
+        description="run `dav.py OPERATION --help` for per-operation usage",
+    )
+    subs.required = True
+
+    for op, ov in api.items():
+        argdefs = ov.get("arguments", {"min": 1, "max": 1})
+        descs = ov.get("descriptions", {})
+        min_args = argdefs.get("min", 1)
+        max_args = argdefs.get("max", 1)
+
+        sp = subs.add_parser(op, help=ov["description"],
+                             formatter_class=argparse.RawDescriptionHelpFormatter)
+
+        for i in range(max_args):
+            desc = descs.get(str(i), f"arg{i + 1}")
+            optional = i >= min_args
+            sp.add_argument(
+                f"arg{i + 1}",
+                metavar=desc.replace(" ", "_").upper()[:24],
+                nargs="?" if optional else None,
+                default="" if optional else None,
+                help=desc,
+            )
+
+        # Operation-specific flags (non-positional entries in descriptions)
+        for key, desc in ((k, v) for k, v in descs.items() if not k.isdigit()):
+            sp.add_argument(f"--{key}", help=desc)
+
+    return parser
+
+
+def _make_options(ns: argparse.Namespace, defaults: dict) -> dict:
+    """Map an argparse Namespace onto a ClientOptions-compatible dict.
+
+    argparse stores option names with underscores; ClientOptions expects hyphens.
+    """
+    skip = {"operation"} | {f"arg{i}" for i in range(1, 10)}
+    opts = {k.replace("_", "-"): v for k, v in vars(ns).items() if k not in skip}
+    merged = copy.deepcopy(defaults)
+    merged.update(opts)
+    merged["defaults"] = copy.deepcopy(defaults)
+    merged["credentials"] = None
+    return merged
+
+
+def _positional_args(ns: argparse.Namespace) -> list[str]:
+    args = []
+    i = 1
+    while (val := getattr(ns, f"arg{i}", None)) is not None:
+        args.append(val)
+        i += 1
+    return args
+
+
+def main(argv: list[str] | None = None) -> None:
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Two-pass parse: resolve --api first so subparsers can be built from it
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--api", default="webdav.json")
+    pre_ns, _ = pre.parse_known_args(argv)
+
+    api = _load_api(pre_ns.api)
+    parser = _build_parser(api)
+    ns = parser.parse_args(argv)
+
+    defaults: dict = {
+        "api": "webdav.json",
+        "credentials-file": "credentials.json",
+        "printf": "{date} {size:r} {path}",
+        "timeout": 86400,
+        **{k: False for k in [
+            "overwrite", "headers", "head", "no-parse", "recursive", "sort",
+            "reverse", "dirs-first", "files-only", "dirs-only", "summary",
+            "list-empty", "checksum", "human", "confirm", "exists", "no-path",
+            "verbose", "no-verify", "hide-root", "debug", "dry-run", "quiet", "no-colors",
+        ]},
+    }
+
+    common.options = _make_options(ns, defaults)
+
+    wd = WebDAVClient(common.options)
+
+    if not wd.setargs(ns.operation, _positional_args(ns)) or \
+       not wd.credentials(common.options["credentials-file"]):
+        sys.exit(1)
+
+    if common.options["debug"]:
+        res = wd.run()
+    else:
+        try:
+            res = wd.run()
+        except Exception as e:
+            print(f"error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    if res and wd.request.hassuccess():
+        if wd.results is None or isinstance(wd.results, bool):
+            note(f"{ns.operation} successful")
+        else:
+            sys.stdout.write(wd.format())
+            sys.stdout.flush()
+    else:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
