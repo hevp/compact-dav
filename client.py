@@ -7,7 +7,7 @@ import simplejson
 from lxml import etree
 from urllib3.exceptions import InsecureRequestWarning
 
-from common import error, debug, verbose, getValueByTagReference, listToDict
+from common import error, debug, verbose, getValueByTagReference, listToDict, relativePath
 from generator import GeneratorFactory
 from parser import ParserFactory
 from request import DAVAuthRequest, DAVRequest
@@ -24,11 +24,10 @@ class ChunkedFile():
 
     def __iter__(self):
         try:
-            data = self.obj.read(self.chunksize)
+            for data in self.obj.read(self.chunksize):
+                yield data
         except Exception as e:
             error(e, 3)
-
-        yield data
 
 
 class WebDAVClient():
@@ -53,7 +52,7 @@ class WebDAVClient():
             # post-process API definition
             for o, ov in self.api.items():
                 # operation definition completeness test
-                missing = ['method', 'description'] - ov.keys()
+                missing = set(['method', 'description']) - set(ov.keys())
                 if len(missing) > 0:
                     error("missing definition elements for operation '{o}': '%s'" % "\', \'".join(missing), 1)
 
@@ -92,7 +91,7 @@ class WebDAVClient():
 
         # credentials completeness test
         required = ['hostname', 'endpoint', 'user', 'token']
-        missing = required - self.options["credentials"].keys()
+        missing = set(required) - set(self.options["credentials"].keys())
         if len(missing) > 0:
             error('missing credential elements: %s' % ", ".join(missing), 1)
 
@@ -167,7 +166,7 @@ class WebDAVClient():
                 if os.path.exists(self.defs["arguments"]["target"]) and not self.options["overwrite"]:
                     error(f"target file {self.defs['arguments']['target']} already exists", 1)
                 with open(self.defs["arguments"]["target"], "wb") as f:
-                    f.write(self.results.encode('utf-8'))
+                    f.write(self.request.response.content)
             except Exception as e:
                 error(e, 1)
             self.results = True
@@ -250,7 +249,7 @@ class WebDAVClient():
             recursiveresults = []
             for res in [r for r in results if r['scope'] == 'response']:
                 if res['type'] == 'd':
-                    recursiveresults += self.doRequest({"source": "%s%s" % (self.options["source"], self.getRelativePath(res, "path"))})
+                    recursiveresults += self.doRequest({"source": "%s%s" % (self.options["source"], relativePath(res, "path"))})
             results += recursiveresults
 
         return results
@@ -314,4 +313,4 @@ class WebDAVClient():
             elif type(self.results) is dict:
                 return simplejson.dumps(self.results)
 
-        return self.results if self.results is str else f"{self.results}"
+        return self.results if isinstance(self.results, str) else f"{self.results}"

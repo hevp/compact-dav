@@ -50,7 +50,7 @@ class DAVRequest():
         # do request
         try:
             s = requests.Session()
-            self.response = s.send(self.request, verify=not self.options['no-verify'], timeout=30)
+            self.response = s.send(self.request, verify=not self.options['no-verify'], timeout=self.options['timeout'])
         except requests.exceptions.ReadTimeout:
             error("request time out after 30 seconds", 2)
         except requests.exceptions.SSLError as e:
@@ -98,7 +98,7 @@ class DAVRequest():
             info = self.response.headers['Content-Type'].split(';')
             if info[0] in ['application/xml', 'text/xml']:
                 try:
-                    self.result = etree.fromstring(self.result.encode('ascii'))
+                    self.result = etree.fromstring(self.result.encode('utf-8'))
                 except Exception as e:
                     error(f"could not decode XML data: {e}")
             elif info[0] in ['application/json', 'text/json']:

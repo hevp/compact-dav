@@ -36,7 +36,7 @@ class Parser(dict):
     def __init__(self, defs, options={}, resultInit=None):
         self.update(defs)
         self.options = options
-        self.result = resultInit
+        self._result = resultInit
 
     def _pre(self, data):
         pass
@@ -55,7 +55,7 @@ class Parser(dict):
         return self
 
     def result(self):
-        return self.result
+        return self._result
 
     def filter(self):
         pass

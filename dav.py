@@ -86,7 +86,7 @@ def main(argv):
         "api": "webdav.json",
         "credentials-file": "credentials.json",
         "printf": "{date} {size:r} {path}",
-        "timeout": 86400
+        "timeout": 30
     }
 
     # define quick options, long: short
