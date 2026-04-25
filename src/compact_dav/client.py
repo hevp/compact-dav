@@ -49,8 +49,14 @@ class WebDAVClient():
     def _loadapi(self):
         # load API definition
         try:
-            with open(self.options['api'], "r") as f:
-                text = f.read()
+            api_path = self.options.get('api')
+            if api_path:
+                with open(api_path, "r") as f:
+                    text = f.read()
+            else:
+                from importlib.resources import files
+                with (files("compact_dav") / "data" / "webdav.json").open("r") as f:
+                    text = f.read()
             self.api = simplejson.loads(text)
 
             # post-process API definition

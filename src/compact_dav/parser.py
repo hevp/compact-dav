@@ -8,7 +8,7 @@ import copy
 from lxml import etree
 from dateutil.parser import parse as dateparse
 
-from common import makeHuman, relativePath
+from .common import makeHuman, relativePath
 
 
 class ParserFactory():

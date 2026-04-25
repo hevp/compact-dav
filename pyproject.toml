@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compact-dav"
+version = "1.2"
+description = "A compact OwnCloud/NextCloud WebDAV client"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    "faust-cchardet>=2",
+    "lxml>=4",
+    "python-dateutil>=2",
+    "requests>=2",
+    "simplejson>=3",
+]
+
+[project.scripts]
+dav = "compact_dav._cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+compact_dav = ["data/*.json"]

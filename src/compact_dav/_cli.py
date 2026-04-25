@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""Compact OwnCloud/NextCloud WebDAV client """
-
-from __future__ import annotations
+"""Compact OwnCloud/NextCloud WebDAV client"""
 
 import argparse
 import copy
 import sys
 import simplejson
 
-from client import WebDAVClient
-import common
-from common import error, note
+from .client import WebDAVClient
+from .common import error, note, options
 
-def _load_api(path: str) -> dict:
+
+def _load_api(path: str | None = None) -> dict:
     try:
-        with open(path) as f:
+        if path:
+            with open(path) as f:
+                return simplejson.load(f)
+        from importlib.resources import files
+        with (files("compact_dav") / "data" / "webdav.json").open("r") as f:
             return simplejson.load(f)
     except Exception as e:
         error(f"api load failed: {e}", 1)
@@ -22,15 +24,15 @@ def _load_api(path: str) -> dict:
 
 def _build_parser(api: dict) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="dav.py",
-        description=f"CompactDAV — OwnCloud/NextCloud WebDAV client",
+        prog="dav",
+        description="CompactDAV — OwnCloud/NextCloud WebDAV client",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--version", action="version", version=f"CompactDAV 1.2")
+    parser.add_argument("--version", action="version", version="CompactDAV 1.2")
 
     infra = parser.add_argument_group("infrastructure")
-    infra.add_argument("--api", default="webdav.json", metavar="FILE",
-                       help="API definition file (default: %(default)s)")
+    infra.add_argument("--api", default=None, metavar="FILE",
+                       help="API definition file (default: bundled webdav.json)")
     infra.add_argument("--credentials-file", "-c", default="credentials.json", metavar="FILE",
                        help="Credentials JSON file (default: %(default)s)")
 
@@ -58,7 +60,7 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
                      help="Prompt before destructive operations")
     req.add_argument("--exists", action="store_true",
                      help="Verify source/target existence before the operation")
-    req.add_argument("--timeout", type=int, default=86400, metavar="SECONDS",
+    req.add_argument("--timeout", type=int, default=30, metavar="SECONDS",
                      help="Request timeout in seconds (default: %(default)s)")
     req.add_argument("--checksum", action="store_true", help="Display file checksum on download")
     req.add_argument("--headers", action="store_true", help="Print response headers")
@@ -78,7 +80,7 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
         dest="operation",
         metavar="OPERATION",
         title="operations",
-        description="run `dav.py OPERATION --help` for per-operation usage",
+        description="run `dav OPERATION --help` for per-operation usage",
     )
     subs.required = True
 
@@ -138,7 +140,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # Two-pass parse: resolve --api first so subparsers can be built from it
     pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--api", default="webdav.json")
+    pre.add_argument("--api", default=None)
     pre_ns, _ = pre.parse_known_args(argv)
 
     api = _load_api(pre_ns.api)
@@ -146,7 +148,7 @@ def main(argv: list[str] | None = None) -> None:
     ns = parser.parse_args(argv)
 
     defaults: dict = {
-        "api": "webdav.json",
+        "api": None,
         "credentials-file": "credentials.json",
         "printf": "{date} {size:r} {path}",
         "timeout": 30,
@@ -183,7 +185,3 @@ def main(argv: list[str] | None = None) -> None:
             sys.stdout.flush()
     else:
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

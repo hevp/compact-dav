@@ -3,8 +3,22 @@
 __pycache__
 .python-version
 HISTORY.md
-*.txt
-*.json
-!webdav.json
-!credentials.stub.json
+
+.vscode/
+
+# user credentials (never commit real credentials)
+credentials.json
+
+# packaging build artefacts
+*.egg-info/
+dist/
+build/
+
+# virtual environments
+venv/
+.venv/
+
+# keep these
 !requirements.txt
+!credentials.stub.json
+!webdav.json

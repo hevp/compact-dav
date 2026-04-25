@@ -1,5 +1,0 @@
-faust-cchardet>=2
-lxml>=4
-python_dateutil>=2
-requests>=2
-simplejson>=3

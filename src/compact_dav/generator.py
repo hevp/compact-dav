@@ -3,7 +3,7 @@
 """
 
 from lxml import etree
-from common import error, getValueByTagReference
+from .common import error, getValueByTagReference
 
 
 class GeneratorFactory():
@@ -44,8 +44,8 @@ class XMLGenerator(Generator):
                     self.generate(v, sub)
                 elif type(v) is list:
                     for value in v:
-                        lk = getValueByTagReference(value.keys()[0], self.data)
-                        lv = getValueByTagReference(value.values()[0], self.data)
+                        lk = getValueByTagReference(list(value.keys())[0], self.data)
+                        lv = getValueByTagReference(list(value.values())[0], self.data)
                         prop = etree.SubElement(sub, self._getXMLTag(lk, NSMAP), nsmap=NSMAP)
                         prop.text = getValueByTagReference(lv, self.data)
                 else:
