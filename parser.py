@@ -92,7 +92,7 @@ class XMLResponseParser(ResponseParser):
                     if var in variables:
                         break
 
-                    p = f".//{ns}:" + f"/{ns}:".join(paths.split('/'))
+                    p = f".//{ns}:{f'/{ns}:'.join(paths.split('/'))}"
                     v = child.find(p, nsmap)
 
                     # note: booleans are stored invertedly due to sorting algorithm
@@ -205,17 +205,17 @@ class ListXMLResponseParser(XMLResponseParser):
                 # justification
                 if var[1] > '':
                     if var[1].isdigit():
-                        val = ("%" + var[1] + "s") % val
+                        val = f"{val:>{var[1]}}"
                     elif var[1] == 'l':
-                        val = ("%-" + maxs[var[0]] + "s") % val
+                        val = f"{val:<{maxs[var[0]]}}"
                     elif var[1] == 'r':
-                        val = ("%" + maxs[var[0]] + "s") % val
+                        val = f"{val:>{maxs[var[0]]}}"
 
                 # replace variable with value
-                text = text.replace("{%s}" % ":".join(filter(lambda x: x > '', list(var))), val)
+                text = text.replace(f"{{{':'.join(v for v in var if v)}}}", val)
 
             # print resulting string
-            printResult += "%s\n" % text
+            printResult += f"{text}\n"
 
         return printResult
 
@@ -229,12 +229,11 @@ class ListXMLResponseParser(XMLResponseParser):
         fcount = len(res) - dcount
 
         # print total size, file count if > 0, directory count if > 0
-        return "%s %s%s%s%s%s\n" % ("\n" if len(self._result) > 0 else "",
-                                  makeHuman(lsum, len(self._result)),
-                                  " in " if len(self._result) > 0 else "",
-                                  "%d file%s" % (fcount, "s" if fcount != 1 else "") if fcount > 0 else "",
-                                  " and " if (dcount > 0 and fcount > 0) else "",
-                                  "%d director%s" % (dcount, "ies" if dcount != 1 else "y") if dcount > 0 else "")
+        has = len(self._result) > 0
+        newline = "\n" if has else ""
+        files = f"{fcount} file{'s' if fcount != 1 else ''}" if fcount > 0 else ""
+        dirs = f"{dcount} director{'ies' if dcount != 1 else 'y'}" if dcount > 0 else ""
+        return f"{newline} {makeHuman(lsum, len(self._result))}{' in ' if has else ''}{files}{' and ' if dcount > 0 and fcount > 0 else ''}{dirs}\n"
 
 
 class JSONResponseParser(ResponseParser):

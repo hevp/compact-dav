@@ -58,7 +58,7 @@ class WebDAVClient():
                 # operation definition completeness test
                 missing = set(['method', 'description']) - set(ov.keys())
                 if len(missing) > 0:
-                    error("missing definition elements for operation '{o}': '%s'" % "\', \'".join(missing), 1)
+                    error(f"missing definition elements for operation '{o}': {', '.join(missing)}", 1)
 
                 # parsing
                 if "parsing" in ov and "variables" in ov["parsing"]:
@@ -97,7 +97,7 @@ class WebDAVClient():
         required = ['hostname', 'endpoint', 'user', 'token']
         missing = set(required) - set(self.options["credentials"].keys())
         if len(missing) > 0:
-            error('missing credential elements: %s' % ", ".join(missing), 1)
+            error(f"missing credential elements: {', '.join(missing)}", 1)
 
         self.options["credentials"]["domain"] = re.sub(r'https?://(.*)', '\\1', self.options["credentials"]["hostname"])
 
@@ -137,7 +137,7 @@ class WebDAVClient():
 
         # make sure a forward slash precedes the path
         self.options["root"] = (f"/{self.args[0]}").replace('//', '/')
-        self.options["target"] = ("/%s" % (self.args[1] if len(self.args) > 1 else "")).replace('//', '/')
+        self.options["target"] = (f"/{self.args[1] if len(self.args) > 1 else ''}").replace('//', '/')
 
         return True
 
@@ -253,7 +253,7 @@ class WebDAVClient():
             recursiveresults = []
             for res in [r for r in results if r['scope'] == 'response']:
                 if res['type'] == 'd':
-                    recursiveresults += self.doRequest({"source": "%s%s" % (self.options["source"], relativePath(res, "path"))})
+                    recursiveresults += self.doRequest({"source": f"{self.options['source']}{relativePath(res, 'path')}"})
             results += recursiveresults
 
         return results
@@ -288,13 +288,13 @@ class WebDAVClient():
         if "confirm" not in self.defs["options"] or not self.defs["options"]["confirm"]:
             return True
 
-        text = "Are you sure you want to %s %s%s (y/n/all/c)? " % (self.defs["method"],
-                                                    "%s%s" % ("from " if self.args[1] is not None else "", self.options["source"]),
-                                                    " to %s" % self.options["target"] if self.args[1] > "" else "")
+        from_str = "from " if self.args[1] is not None else ""
+        to_str = f" to {self.options['target']}" if self.args[1] > "" else ""
+        text = f"Are you sure you want to {self.defs['method']} {from_str}{self.options['source']}{to_str} (y/n/all/c)? "
 
         # auto confirm or get input
         if not self.options['confirm']:
-            print("%sy" % text)
+            print(f"{text}y")
         else:
             while True:
                 choice = input(text)

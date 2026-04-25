@@ -1,162 +1,184 @@
 #!/usr/bin/env python3
+"""Compact OwnCloud/NextCloud WebDAV client """
 
-""" Compact OwnCloud/NextCloud WebDAV client
-    Author: hevp
+from __future__ import annotations
 
-    Requires: Python 3
-    Packages: see requirements.txt
-"""
-
-import sys, getopt, copy
+import argparse
+import copy
+import sys
+import simplejson
 
 from client import WebDAVClient
 import common
 from common import error, note
 
-
-TITLE = "CompactDAV"
-VERSION = "1.1"
-
-
-class ClientOptions(dict):
-    def __init__(self, options, defaults):
-        self.update(options)
-        self["defaults"] = defaults
-        self["credentials"] = None
+def _load_api(path: str) -> dict:
+    try:
+        with open(path) as f:
+            return simplejson.load(f)
+    except Exception as e:
+        error(f"api load failed: {e}", 1)
 
 
-def version():
-    print("%s version %s" % (TITLE, VERSION))
+def _build_parser(api: dict) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="dav.py",
+        description=f"CompactDAV — OwnCloud/NextCloud WebDAV client",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--version", action="version", version=f"CompactDAV 1.2")
+
+    infra = parser.add_argument_group("infrastructure")
+    infra.add_argument("--api", default="webdav.json", metavar="FILE",
+                       help="API definition file (default: %(default)s)")
+    infra.add_argument("--credentials-file", "-c", default="credentials.json", metavar="FILE",
+                       help="Credentials JSON file (default: %(default)s)")
+
+    out = parser.add_argument_group("output")
+    out.add_argument("--printf", "-p", default="{date} {size:r} {path}", metavar="FORMAT",
+                     help="Output format string (default: %(default)r)")
+    # Note: -h is reserved by argparse for --help; original used -h for --human
+    out.add_argument("--human", "-H", action="store_true", help="Human-readable file sizes")
+    out.add_argument("--summary", "-u", action="store_true", help="Append size/count summary")
+    out.add_argument("--no-colors", action="store_true", help="Disable ANSI colour output")
+    out.add_argument("--no-parse", action="store_true", help="Skip response parsing")
+    out.add_argument("--hide-root", action="store_true", help="Omit the root entry from listings")
+    out.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    out.add_argument("--debug", action="store_true", help="Debug output")
+    out.add_argument("--quiet", "-q", action="store_true", help="Suppress non-error output")
+
+    req = parser.add_argument_group("request")
+    req.add_argument("--dry-run", "-n", action="store_true",
+                     help="Print the request without executing it")
+    req.add_argument("--no-verify", "-k", action="store_true",
+                     help="Disable SSL certificate verification")
+    req.add_argument("--overwrite", "-o", action="store_true",
+                     help="Overwrite an existing target")
+    req.add_argument("--confirm", "-y", action="store_true",
+                     help="Prompt before destructive operations")
+    req.add_argument("--exists", action="store_true",
+                     help="Verify source/target existence before the operation")
+    req.add_argument("--timeout", type=int, default=86400, metavar="SECONDS",
+                     help="Request timeout in seconds (default: %(default)s)")
+    req.add_argument("--checksum", action="store_true", help="Display file checksum on download")
+    req.add_argument("--headers", action="store_true", help="Print response headers")
+    req.add_argument("--head", action="store_true", help="Issue a HEAD request only")
+
+    flt = parser.add_argument_group("listing and filtering")
+    flt.add_argument("--recursive", "-R", action="store_true", help="Recurse into subdirectories")
+    flt.add_argument("--sort", action="store_true", help="Sort results by path")
+    flt.add_argument("--reverse", "-r", action="store_true", help="Reverse sort order")
+    flt.add_argument("--dirs-first", "-t", action="store_true", help="List directories before files")
+    flt.add_argument("--files-only", "-f", action="store_true", help="Show files only")
+    flt.add_argument("--dirs-only", "-d", action="store_true", help="Show directories only")
+    flt.add_argument("--list-empty", "-e", action="store_true", help="Show only empty directories")
+    flt.add_argument("--no-path", action="store_true", help="Omit paths from output")
+
+    subs = parser.add_subparsers(
+        dest="operation",
+        metavar="OPERATION",
+        title="operations",
+        description="run `dav.py OPERATION --help` for per-operation usage",
+    )
+    subs.required = True
+
+    for op, ov in api.items():
+        argdefs = ov.get("arguments", {"min": 1, "max": 1})
+        descs = ov.get("descriptions", {})
+        min_args = argdefs.get("min", 1)
+        max_args = argdefs.get("max", 1)
+
+        sp = subs.add_parser(op, help=ov["description"],
+                             formatter_class=argparse.RawDescriptionHelpFormatter)
+
+        for i in range(max_args):
+            desc = descs.get(str(i), f"arg{i + 1}")
+            optional = i >= min_args
+            sp.add_argument(
+                f"arg{i + 1}",
+                metavar=desc.replace(" ", "_").upper()[:24],
+                nargs="?" if optional else None,
+                default="" if optional else None,
+                help=desc,
+            )
+
+        # Operation-specific flags (non-positional entries in descriptions)
+        for key, desc in ((k, v) for k, v in descs.items() if not k.isdigit()):
+            sp.add_argument(f"--{key}", help=desc)
+
+    return parser
 
 
-def usage():
-    print("usage: dav.py <operation> <options> <args..>")
+def _make_options(ns: argparse.Namespace, defaults: dict) -> dict:
+    """Map an argparse Namespace onto a ClientOptions-compatible dict.
+
+    argparse stores option names with underscores; ClientOptions expects hyphens.
+    """
+    skip = {"operation"} | {f"arg{i}" for i in range(1, 10)}
+    opts = {k.replace("_", "-"): v for k, v in vars(ns).items() if k not in skip}
+    merged = copy.deepcopy(defaults)
+    merged.update(opts)
+    merged["defaults"] = copy.deepcopy(defaults)
+    merged["credentials"] = None
+    return merged
 
 
-def help(wd, operation, quickopts):
-    if operation == "" or operation not in wd.api.keys():
-        version()
-        usage()
-
-        # get maximum length of name of operation
-        maxop = str(max(map(lambda x: len(x[0]), wd.api.items())) + 2)
-        # print operations
-        print("\nOperations:")
-        for o, ov in wd.api.items():
-            print(("%-" + maxop + "s %s") % (o, ov["description"]))
-
-        # get maximum length of name of options, and value
-        maxopk = str(max(map(lambda x: len(x), wd.options.keys())))
-        # print options
-        print("\nOptions:")
-        for k, v in quickopts.items():
-            kr = k.replace('=', '')
-            print(("%s --%-" + maxopk + "s  %s %s") % ("-%s " % v[0] if v else "   ",
-                  kr,
-                  ("%s %-" + maxopk + "s") % ("Enable" if kr == k else "Set", kr if kr in wd.options["defaults"].keys() else " " * (int(maxopk) + 7)),
-                  "%s(default: '%s')" % ("" if kr == k else " " * 3, wd.options["defaults"][kr] if kr in wd.options["defaults"].keys() else "")))
-    else:
-        # determine required and optional arguments for operation
-        args = ""
-        for i in range(1, wd.api[operation]['arguments']['max'] + 1):
-            args += " %s<arg%d>%s" % ("[" if i > wd.api[operation]['arguments']['min'] else "", i, "]" if i > wd.api[operation]['arguments']['min'] else "")
-
-        # print info and syntax
-        print(wd.api[operation]['description'])
-        print("\nSyntax: %s %s%s%s" % (sys.argv[0], "[options] " if len(wd.api[operation]['options']) else "", operation, args))
-
-        # print description per argument
-        if 'descriptions' in wd.api[operation]:
-            print("\nArguments:")
-            for a, d in filter(lambda x: x[0].isdigit(), wd.api[operation]['descriptions'].items()):
-                print(f"  {int(a) + 1}: {d}")
-            if len(wd.api[operation]['options']):
-                print("\nOptions:")
-                maxopk = str(max(map(lambda x: len(x), wd.api[operation]['descriptions'].keys())))
-                maxopv = str(max(map(lambda x: len(x), wd.api[operation]['descriptions'].values())))
-                for a, d in filter(lambda x: not x[0].isdigit(), wd.api[operation]['descriptions'].items()):
-                    print(("  --%-" + maxopk + "s  %-" + maxopv + "s  (default: '%s')") % (a, d, wd.options[a]))
-
-    print()
+def _positional_args(ns: argparse.Namespace) -> list[str]:
+    args = []
+    i = 1
+    while (val := getattr(ns, f"arg{i}", None)) is not None:
+        args.append(val)
+        i += 1
+    return args
 
 
-def main(argv):
-    # default values for options
-    defaults = {
+def main(argv: list[str] | None = None) -> None:
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Two-pass parse: resolve --api first so subparsers can be built from it
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--api", default="webdav.json")
+    pre_ns, _ = pre.parse_known_args(argv)
+
+    api = _load_api(pre_ns.api)
+    parser = _build_parser(api)
+    ns = parser.parse_args(argv)
+
+    defaults: dict = {
         "api": "webdav.json",
         "credentials-file": "credentials.json",
         "printf": "{date} {size:r} {path}",
-        "timeout": 30
+        "timeout": 30,
+        **{k: False for k in [
+            "overwrite", "headers", "head", "no-parse", "recursive", "sort",
+            "reverse", "dirs-first", "files-only", "dirs-only", "summary",
+            "list-empty", "checksum", "human", "confirm", "exists", "no-path",
+            "verbose", "no-verify", "hide-root", "debug", "dry-run", "quiet", "no-colors",
+        ]},
     }
 
-    # define quick options, long: short
-    quickopts = {"overwrite": "o", "headers": "", "head": "", "no-parse": "", "recursive": "R", "sort": "", "reverse": "r",
-                 "dirs-first": "t", "files-only": "f", "dirs-only": "d", "summary": "u", "list-empty": "e", "checksum": "",
-                 "human": "h", "confirm": "y", "exists": "", "no-path": "", "verbose": "v", "no-verify": "k", "hide-root": "",
-                 "debug": "", "dry-run": "n", "quiet": "q", "no-colors": "", "api=": "", "credentials-file=": "c:", "printf=": "p:", "help": "", "version": ""}
+    common.options = _make_options(ns, defaults)
 
-    # remove = and : in options
-    quickoptsm = dict((k.replace('=', ''), v.replace(':', '')) for k, v in quickopts.items())
-
-    # assign values to quick options
-    defaults = dict(defaults, **{k: False for k in quickoptsm.keys() if k not in defaults})
-    common.options = ClientOptions(copy.deepcopy(defaults), copy.deepcopy(defaults))
-
-    # handle arguments
-    try:
-        opts, args = getopt.gnu_getopt(argv,
-                                       "".join(list(filter(lambda x: x > "", quickopts.values()))),
-                                       list(quickopts.keys()))
-    except getopt.GetoptError as e:
-        error(e, 1)
-
-    # set operation
-    operation = args[0] if len(args) > 0 else ""
-
-    # parse options and arguments
-    for opt, arg in opts:
-        if opt[2:] in quickoptsm.keys():
-            common.options[opt[2:]] = arg if arg > "" else True
-        elif opt[1:] in quickoptsm.values():
-            index = [k for k, v in quickoptsm.items() if v == opt[1:]][0]
-            common.options[index] = arg if arg > "" else True
-
-    # create object and read credentials
     wd = WebDAVClient(common.options)
 
-    if common.options['help']:
-        help(wd, operation, quickopts)
-        sys.exit(0)
-    elif common.options['version']:
-        version()
-        sys.exit(0)
-
-    # check operation
-    if operation == "":
-        usage()
+    if not wd.setargs(ns.operation, _positional_args(ns)) or \
+       not wd.credentials(common.options["credentials-file"]):
         sys.exit(1)
 
-    # init operation and credentials
-    if not wd.setargs(operation, args[1:]) or \
-       not wd.credentials(common.options['credentials-file']):
-        sys.exit(1)
-
-    # get result and print
-    if common.options['debug']:
+    if common.options["debug"]:
         res = wd.run()
     else:
         try:
             res = wd.run()
         except Exception as e:
-            print(f"error: {e}")
-            sys.exit()
+            print(f"error: {e}", file=sys.stderr)
+            sys.exit(1)
 
-    # if there is a result, print it
     if res and wd.request.hassuccess():
-        if wd.results is None or type(wd.results) is bool:
-            note("%s successful" % operation)
+        if wd.results is None or isinstance(wd.results, bool):
+            note(f"{ns.operation} successful")
         else:
-            # print out the result, could be XML data
             sys.stdout.write(wd.format())
             sys.stdout.flush()
     else:
@@ -164,4 +186,4 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()

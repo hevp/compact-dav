@@ -21,13 +21,13 @@ class DAVRequest():
         self.session = requests.Session()
 
     def run(self, method, path, expectedStatus=SUCCESS, **kwargs):
-        verbose("Request data: %s" % (data[:1000] if isinstance(data := kwargs.get('data', None), str) else type(data)))
+        verbose(f"Request data: {data[:1000] if isinstance(data := kwargs.get('data', None), str) else type(data)}")
 
         if self.options['head']:
             method = "HEAD"
 
         # construct url
-        url = self.options["credentials"]["hostname"] + self.options["credentials"]["endpoint"]
+        url = f"{self.options['credentials']['hostname']}{self.options['credentials']['endpoint']}"
         if not self.options['no-path']:
             url += path
 
@@ -37,16 +37,16 @@ class DAVRequest():
         self.request = req.prepare()
         self.success = False
 
-        verbose("Request headers: %s" % self.request.headers)
+        verbose(f"Request headers: {self.request.headers}")
 
         # exit if dry-run
         if self.options['dry-run']:
-            warning("dry-run: " + method.upper() + " " + req.url)
+            warning(f"dry-run: {method.upper()} {req.url}")
             return False
 
         # some debug messages
-        verbose("Options: %s" % self.options)
-        debug(method.upper() + " " + self.request.url)
+        verbose(f"Options: {self.options}")
+        debug(f"{method.upper()} {self.request.url}")
 
         # do request
         try:
@@ -81,7 +81,7 @@ class DAVRequest():
             # extract filename
             m = re.match(r'attachment;.+filename="([^"]+)"', self.response.headers['Content-Disposition'])
             if not m:
-                error("invalid response header disposition value: %s" % self.response.headers['Content-Disposition'], 1)
+                error(f"invalid response header disposition value: {self.response.headers['Content-Disposition']}", 1)
             else:
                 self.download['filename'] = m.group(1)
             # extract checksum if available
@@ -121,7 +121,8 @@ class DAVRequest():
                 nsmap = {k: v for k, v in self.result.nsmap.items() if k}
                 message = self.result.find('.//s:message', nsmap).text
 
-        return error('%s (%s)%s' % (self.response.reason, self.response.status_code, ": %s" % message if message > "" else ""))
+        suffix = f": {message}" if message > "" else ""
+        return error(f"{self.response.reason} ({self.response.status_code}){suffix}")
 
 
 class DAVAuthRequest(DAVRequest):

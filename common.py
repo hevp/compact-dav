@@ -14,7 +14,7 @@ def getFromDict(dataDict, mapList, valueOnError=None):
 
 def makeHuman(value, addBytes=False, base=1000, decimals=1):
     if not options['human']:
-        return "%d%s" % (value, " bytes" if addBytes else "")
+        return f"{value}{' bytes' if addBytes else ''}"
 
     units = {
         1000: ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"),
@@ -26,7 +26,8 @@ def makeHuman(value, addBytes=False, base=1000, decimals=1):
     while i < len(units[base]) and value > (base ** i):
         i += 1
 
-    return "%.03s %s" % (((value*(10**decimals)) / (base ** (i-1))) / (10**decimals) if i > 1 else value, units[base][i-1])
+    display = ((value * (10**decimals)) / (base ** (i-1))) / (10**decimals) if i > 1 else value
+    return f"{display!s:.3} {units[base][i-1]}"
 
 
 def relativePath(r, var, root, endpoint):
@@ -38,7 +39,7 @@ def relativePath(r, var, root, endpoint):
     # add leading slash
     sp = val.split('/')
     if 'type' in r and r['type'] == 'd' and len(sp) > 1:
-        val = "/" + sp[-2]
+        val = f"/{sp[-2]}"
     elif len(sp) > 1:
         val = "/".join(sp[1:])
 
@@ -52,13 +53,13 @@ def listToDict(*args):
 def getValueByTagReference(v, *args):
     for m in re.findall(r'@([0-9]+)|@{([\w\.\-]+)}', v):
         rv = m[1] if m[1] > '' else m[0]
-        rs = "@%s" % (("{%s}" % m[1]) if m[1] > '' else m[0])
+        rs = f"@{{{m[1]}}}" if m[1] > '' else f"@{m[0]}"
         for d in args:
             ov = getFromDict(d, rv.split('.'))
             if ov:
                 break
         if ov is None:
-            warning("value reference: tag %s does not exist in provided data" % rs)
+            warning(f"value reference: tag {rs} does not exist in provided data")
         v = v.replace(rs, str(ov)) if ov else v
     return v.replace('@@', '@')
 
@@ -72,7 +73,8 @@ def message(target, msg, msgtype="", color='\x1b[0m', ret=True):
         if not options['no-colors']:
             target.write(color)
 
-        target.write('%s:\x1b[0m %s\n' % ("%% %s()" % frames[2][3] if msgtype in ["debug", "verbose"] else msgtype, msg))
+        prefix = f"% {frames[2][3]}()" if msgtype in ["debug", "verbose"] else msgtype
+        target.write(f"{prefix}:\x1b[0m {msg}\n")
 
         if not options['no-colors']:
             target.write('\x1b[0m')
