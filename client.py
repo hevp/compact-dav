@@ -19,6 +19,7 @@ class ChunkedFile():
         self.chunksize = chunksize
         try:
             self.obj = open(filename, 'rb')
+            self.size = os.path.getsize(filename)
         except Exception as e:
             error(e, 1)
 
@@ -28,6 +29,9 @@ class ChunkedFile():
                 yield data
         except Exception as e:
             error(e, 3)
+
+    def __len__(self):
+        return self.size
 
 
 class WebDAVClient():

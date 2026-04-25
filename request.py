@@ -18,9 +18,10 @@ class DAVRequest():
         self.response = None
         self.download = {}
         self.success = False
+        self.session = requests.Session()
 
-    def run(self, method, path, headers={}, params={}, data="", expectedStatus=SUCCESS, auth=None, quiet=False):
-        verbose("Request data: %s" % (data[:1000] if type(data) is str else type(data)))
+    def run(self, method, path, expectedStatus=SUCCESS, **kwargs):
+        verbose("Request data: %s" % (data[:1000] if isinstance(data := kwargs.get('data', None), str) else type(data)))
 
         if self.options['head']:
             method = "HEAD"
@@ -31,7 +32,7 @@ class DAVRequest():
             url += path
 
         # construct request
-        req = requests.Request(method, url, headers=headers, params=params, data=data, auth=auth)
+        req = requests.Request(method, url, **kwargs)
 
         self.request = req.prepare()
         self.success = False
@@ -49,8 +50,7 @@ class DAVRequest():
 
         # do request
         try:
-            s = requests.Session()
-            self.response = s.send(self.request, verify=not self.options['no-verify'], timeout=self.options['timeout'])
+            self.response = self.session.send(self.request, verify=not self.options['no-verify'], timeout=self.options['timeout'])
         except requests.exceptions.ReadTimeout:
             error("request time out after 30 seconds", 2)
         except requests.exceptions.SSLError as e:
@@ -125,7 +125,7 @@ class DAVRequest():
 
 
 class DAVAuthRequest(DAVRequest):
-    def run(self, method, path, headers={}, params={}, data="", expectedStatus=DAVRequest.SUCCESS, quiet=False):
-        return DAVRequest.run(self, method, path, headers, params, data, expectedStatus,
-                              auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]) if 'Authorization' not in headers else None,
-                              quiet=quiet)
+    def run(self, method, path, expectedStatus=DAVRequest.SUCCESS, **kwargs):
+        return DAVRequest.run(self, method, path, expectedStatus=expectedStatus,
+                              auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]) if 'Authorization' not in kwargs.get('headers', {}) else None,
+                              **kwargs)

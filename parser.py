@@ -61,7 +61,7 @@ class Parser(dict):
         pass
 
     def format(self):
-        return copy.deepcopy(self.result)
+        return copy.deepcopy(self._result)
 
 
 class HeadersParser(Parser):
@@ -119,19 +119,19 @@ class XMLResponseParser(ResponseParser):
                             variables[var] = v.text
 
             # add to results
-            self.result.append(variables)
+            self._result.append(variables)
 
     def _post(self, data):
         # apply sorting etc
         if self.options['sort'] and self.options['dirs-first']:
-            self.result.sort(key=lambda x: x['type'] + x['path'].lower(), reverse=self.options['reverse'])
+            self._result.sort(key=lambda x: x['type'] + x['path'].lower(), reverse=self.options['reverse'])
         elif self.options['sort']:
-            self.result.sort(key=lambda x: x['path'].lower(), reverse=self.options['reverse'])
+            self._result.sort(key=lambda x: x['path'].lower(), reverse=self.options['reverse'])
         elif self.options['dirs-first']:
-            self.result.sort(key=lambda x: x['type'], reverse=self.options['reverse'])
+            self._result.sort(key=lambda x: x['type'], reverse=self.options['reverse'])
 
-        if self.options['hide-root'] and len(self.result):
-            self.result = self.result[1:]
+        if self.options['hide-root'] and len(self._result):
+            self._result = self._result[1:]
 
 
 class ListXMLResponseParser(XMLResponseParser):
@@ -140,12 +140,12 @@ class ListXMLResponseParser(XMLResponseParser):
 
         # filtering
         if self.options['list-empty']:
-            self.result = list(filter(lambda x: x['type'] == 'd' and x['size'] == 0, self.result))
+            self._result = list(filter(lambda x: x['type'] == 'd' and x['size'] == 0, self._result))
         # filter dirs (wins) or files
         if self.options['dirs-only']:
-            self.result = list(filter(lambda x: x['type'] == 'd', self.result))
+            self._result = list(filter(lambda x: x['type'] == 'd', self._result))
         elif self.options['files-only']:
-            self.result = list(filter(lambda x: x['type'] == 'f', self.result))
+            self._result = list(filter(lambda x: x['type'] == 'f', self._result))
 
     def format(self):
         printResult = ""
@@ -159,7 +159,7 @@ class ListXMLResponseParser(XMLResponseParser):
 
         # loop through result list
         results = []
-        for item in self.result:
+        for item in self._result:
             if self.options['recursive'] and item['type'] == 'd':
                 continue
 
@@ -221,7 +221,7 @@ class ListXMLResponseParser(XMLResponseParser):
 
     def format_summary(self):
         # filter out any directory if recursive
-        res = copy.deepcopy(self.result) if not self.options['recursive'] else list(filter(lambda x: x['type'] != "d", self.result))
+        res = copy.deepcopy(self._result) if not self.options['recursive'] else list(filter(lambda x: x['type'] != "d", self._result))
 
         # get total size, directory and file counts
         lsum = sum(map(lambda x: x['size'], res))
@@ -229,9 +229,9 @@ class ListXMLResponseParser(XMLResponseParser):
         fcount = len(res) - dcount
 
         # print total size, file count if > 0, directory count if > 0
-        return "%s %s%s%s%s%s\n" % ("\n" if len(self.result) > 0 else "",
-                                  makeHuman(lsum, len(self.result)),
-                                  " in " if len(self.result) > 0 else "",
+        return "%s %s%s%s%s%s\n" % ("\n" if len(self._result) > 0 else "",
+                                  makeHuman(lsum, len(self._result)),
+                                  " in " if len(self._result) > 0 else "",
                                   "%d file%s" % (fcount, "s" if fcount != 1 else "") if fcount > 0 else "",
                                   " and " if (dcount > 0 and fcount > 0) else "",
                                   "%d director%s" % (dcount, "ies" if dcount != 1 else "y") if dcount > 0 else "")
