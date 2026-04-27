@@ -7,10 +7,11 @@ import simplejson
 from lxml import etree
 from urllib3.exceptions import InsecureRequestWarning
 
-from common import error, debug, verbose, getValueByTagReference, listToDict, relativePath
-from generator import GeneratorFactory
-from parser import ParserFactory
-from request import DAVAuthRequest, DAVRequest
+from .common import error, debug, verbose, getValueByTagReference, listToDict, relativePath
+from .config import Config
+from .generator import GeneratorFactory
+from .parser import ParserFactory
+from .request import DAVAuthRequest, DAVRequest
 
 class ChunkedFile():
     """ Chunked file upload class to be used with requests package """
@@ -37,10 +38,9 @@ class ChunkedFile():
 class WebDAVClient():
     """ WebDAV client class to set up requests for WebDAV-enabled servers """
 
-    def __init__(self, options):
+    def __init__(self):
         self.args = {}
         self.results = None
-        self.options = options
         self.headers = {}
         self.operation = None
 
@@ -49,7 +49,7 @@ class WebDAVClient():
     def _loadapi(self):
         # load API definition
         try:
-            api_path = self.options.get('api')
+            api_path = Config['api']
             if api_path:
                 with open(api_path, "r") as f:
                     text = f.read()
@@ -81,11 +81,11 @@ class WebDAVClient():
                 # set operation-specific option values if operation set
                 if o == self.operation:
                     for (option, value) in ov["options"].items():
-                        if option not in self.options:
+                        if option not in Config:
                             raise Exception(f"invalid option {option}")
                         # alter only if set application option does not differs from default
-                        if self.options[option] == self.options["defaults"][option]:
-                            self.options[option] = value
+                        if Config[option] == Config["defaults"][option]:
+                            Config[option] = value
         except Exception as e:
             error(f"api load failed: {e}", 1)
 
@@ -93,7 +93,7 @@ class WebDAVClient():
         try:
             with open(os.path.abspath(filename), "r") as f:
                 text = f.read()
-            self.options["credentials"] = simplejson.loads(text)
+            Config["credentials"] = simplejson.loads(text)
         except Exception as e:
             error(f"credentials loading failed: {e}", 1)
 
@@ -101,16 +101,16 @@ class WebDAVClient():
 
         # credentials completeness test
         required = ['hostname', 'endpoint', 'user', 'token']
-        missing = set(required) - set(self.options["credentials"].keys())
+        missing = set(required) - set(Config["credentials"].keys())
         if len(missing) > 0:
             error(f"missing credential elements: {', '.join(missing)}", 1)
 
-        self.options["credentials"]["domain"] = re.sub(r'https?://(.*)', '\\1', self.options["credentials"]["hostname"])
+        Config["credentials"]["domain"] = re.sub(r'https?://(.*)', '\\1', Config["credentials"]["hostname"])
 
         # apply any other settings
-        self.options.update({x: self.options["credentials"][x] for x in self.options["credentials"].keys() - required})
+        Config.update({x: Config["credentials"][x] for x in Config["credentials"].keys() - required})
 
-        verbose(self.options["credentials"])
+        verbose(Config["credentials"])
 
         return True
 
@@ -120,7 +120,7 @@ class WebDAVClient():
             error(f"unknown operation '{operation}'", 1)
 
         # copy arguments
-        self.options["operation"] = operation
+        Config["operation"] = operation
         self.args = copy.deepcopy(args)
 
         # set arguments
@@ -142,8 +142,8 @@ class WebDAVClient():
             self.defs["arguments"][k] = getValueByTagReference(v, listToDict(self.args))
 
         # make sure a forward slash precedes the path
-        self.options["root"] = (f"/{self.args[0]}").replace('//', '/')
-        self.options["target"] = (f"/{self.args[1] if len(self.args) > 1 else ''}").replace('//', '/')
+        Config["root"] = (f"/{self.args[0]}").replace('//', '/')
+        Config["target"] = (f"/{self.args[1] if len(self.args) > 1 else ''}").replace('//', '/')
 
         return True
 
@@ -151,20 +151,20 @@ class WebDAVClient():
         """ Perform one of supported actions """
 
         # disable requests warning if quiet and verification off
-        if self.options['no-verify']:
+        if Config['no-verify']:
             requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-            if self.options['quiet']:
+            if Config['quiet']:
                 debug('InsecureRequestWarning disabled')
 
         # start in root path, except if no-path option set
-        self.options["source"] = self.options["root"] if "no-path" not in self.defs["options"] or not self.defs["options"]["no-path"] else ""
+        Config["source"] = Config["root"] if "no-path" not in self.defs["options"] or not self.defs["options"]["no-path"] else ""
 
         # check operation requirements
         if not self.exists() or not self.confirm():
             return False
 
         # do request
-        self.results = self.doRequest(self.options)
+        self.results = self.doRequest()
 
         # if boolean false, return
         if not self.results:
@@ -173,7 +173,7 @@ class WebDAVClient():
         # if downloading file and target has been defined
         if "target" in self.defs["arguments"] and self.defs["arguments"]["target"] > "":
             try:
-                if os.path.exists(self.defs["arguments"]["target"]) and not self.options["overwrite"]:
+                if os.path.exists(self.defs["arguments"]["target"]) and not Config["overwrite"]:
                     error(f"target file {self.defs['arguments']['target']} already exists", 1)
                 with open(self.defs["arguments"]["target"], "wb") as f:
                     f.write(self.request.response.content)
@@ -182,7 +182,7 @@ class WebDAVClient():
             self.results = True
 
         # return immediately if no parsing requested
-        if "parsing" not in self.defs or self.options['no-parse']:
+        if "parsing" not in self.defs or Config['no-parse']:
             return True
 
         # show results
@@ -194,7 +194,7 @@ class WebDAVClient():
                 result = r.format()
 
                 # display summary if requested
-                if self.options['summary']:
+                if Config['summary']:
                     result += r.format_summary()
 
             self.results = result if result else self.results
@@ -208,14 +208,10 @@ class WebDAVClient():
             # conditional headers to be implemented
             pass
         else:
-            self.headers[tag] = getValueByTagReference(value, listToDict(self.args), self.options)
+            self.headers[tag] = getValueByTagReference(value, listToDict(self.args))
 
-    def doRequest(self, options={}):
-        # replace client options by local options
-        opts = copy.deepcopy(self.options)
-        opts.update(options)
-
-        self.request = DAVAuthRequest(options)
+    def doRequest(self):
+        self.request = DAVAuthRequest()
 
         # set request headers if required
         if "headers" in self.defs:
@@ -229,37 +225,37 @@ class WebDAVClient():
             data = ChunkedFile(self.defs["arguments"]["file"])
             self.headers['Content-Type'] = 'application/octet-stream'
         elif "data" in self.defs:
-            gen = GeneratorFactory.getGenerator(self.defs["data"], self.options)
+            gen = GeneratorFactory.getGenerator(self.defs["data"])
             data = gen.generate(self.defs["data"])
             self.headers['Content-Type'] = gen.getContentType()
 
         # run request, exits early if dry-run
-        response = self.request.run(self.defs["method"], opts["source"], headers=self.headers, data=data)
+        response = self.request.run(self.defs["method"], Config["source"], headers=self.headers, data=data)
 
         # return if failed
         if not self.request.hassuccess() or response is None:
             return error(f"{self.request.response.status_code} {self.request.response.reason}")
 
         # exit if dry-run
-        if opts['dry-run']:
+        if Config['dry-run']:
             return False
 
         # return immediately without response if no parsing defined
         if "parsing" not in self.defs and "filename" not in self.request.download:
             return True
         # return immediately if no parsing requested
-        if opts['no-parse'] or "filename" in self.request.download:
+        if Config['no-parse'] or "filename" in self.request.download:
             return response
 
         # parse request response
-        results = self.parse(response, opts)
+        results = self.parse(response, Config)
 
         # recursive processing
-        if self.options['recursive']:
+        if Config['recursive']:
             recursiveresults = []
             for res in [r for r in results if r['scope'] == 'response']:
                 if res['type'] == 'd':
-                    recursiveresults += self.doRequest({"source": f"{self.options['source']}{relativePath(res, 'path')}"})
+                    recursiveresults += self.doRequest({"source": f"{Config['source']}{relativePath(res, 'path')}"})
             results += recursiveresults
 
         return results
@@ -268,23 +264,23 @@ class WebDAVClient():
         if "exists" not in self.defs["options"] or not self.defs["options"]["exists"]:
             return True
 
-        req = DAVAuthRequest(self.options)
+        req = DAVAuthRequest(Config)
 
         # check if the source path exists
-        req.run("propfind", self.options["source"], quiet=True)
+        req.run("propfind", Config["source"], quiet=True)
 
         if req.response.status_code not in DAVRequest.SUCCESS:
-            return error(f"cannot {self.defs['method']}: source path {self.options['source']} does not exist")
+            return error(f"cannot {self.defs['method']}: source path {Config['source']} does not exist")
 
         if self.args[1] == "":
             return True
 
         # check if the target path does not exists
-        req.run("propfind", self.options["target"], quiet=True)
+        req.run("propfind", Config["target"], quiet=True)
 
         if req.response.status_code in DAVRequest.SUCCESS:
-            if not self.options['overwrite']:
-                return error(f"cannot {self.defs['method']}: target path {self.options['target']} already exists")
+            if not Config['overwrite']:
+                return error(f"cannot {self.defs['method']}: target path {Config['target']} already exists")
             else:
                 self.headers['Overwrite'] = 'T'
 
@@ -295,11 +291,11 @@ class WebDAVClient():
             return True
 
         from_str = "from " if self.args[1] is not None else ""
-        to_str = f" to {self.options['target']}" if self.args[1] > "" else ""
-        text = f"Are you sure you want to {self.defs['method']} {from_str}{self.options['source']}{to_str} (y/n/all/c)? "
+        to_str = f" to {Config['target']}" if self.args[1] > "" else ""
+        text = f"Are you sure you want to {self.defs['method']} {from_str}{Config['source']}{to_str} (y/n/all/c)? "
 
         # auto confirm or get input
-        if not self.options['confirm']:
+        if not Config['confirm']:
             print(f"{text}y")
         else:
             while True:
@@ -317,7 +313,7 @@ class WebDAVClient():
     def format(self):
         """ Format the result of the request """
 
-        if self.options['human']:
+        if Config['human']:
             if type(self.results) is etree._Element:
                 return etree.tostring(self.results).decode('utf-8')
             elif type(self.results) is dict:

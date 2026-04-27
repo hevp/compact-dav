@@ -2,13 +2,12 @@
 """Compact OwnCloud/NextCloud WebDAV client"""
 
 import argparse
-import copy
 import sys
 import simplejson
 
 from .client import WebDAVClient
-from .common import error, note, options
-
+from .common import error, note
+from .config import Config
 
 def _load_api(path: str | None = None) -> dict:
     try:
@@ -111,20 +110,6 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
     return parser
 
 
-def _make_options(ns: argparse.Namespace, defaults: dict) -> dict:
-    """Map an argparse Namespace onto a ClientOptions-compatible dict.
-
-    argparse stores option names with underscores; ClientOptions expects hyphens.
-    """
-    skip = {"operation"} | {f"arg{i}" for i in range(1, 10)}
-    opts = {k.replace("_", "-"): v for k, v in vars(ns).items() if k not in skip}
-    merged = copy.deepcopy(defaults)
-    merged.update(opts)
-    merged["defaults"] = copy.deepcopy(defaults)
-    merged["credentials"] = None
-    return merged
-
-
 def _positional_args(ns: argparse.Namespace) -> list[str]:
     args = []
     i = 1
@@ -160,15 +145,14 @@ def main(argv: list[str] | None = None) -> None:
         ]},
     }
 
-    common.options = _make_options(ns, defaults)
-
-    wd = WebDAVClient(common.options)
+    Config.set(ns, defaults)
+    wd = WebDAVClient()
 
     if not wd.setargs(ns.operation, _positional_args(ns)) or \
-       not wd.credentials(common.options["credentials-file"]):
+       not wd.credentials(Config["credentials-file"]):
         sys.exit(1)
 
-    if common.options["debug"]:
+    if Config["debug"]:
         res = wd.run()
     else:
         try:

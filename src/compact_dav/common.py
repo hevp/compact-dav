@@ -1,9 +1,6 @@
 import sys, inspect, re, urllib, functools
 
-
-# current options global
-options = {}
-
+from .config import Config
 
 def getFromDict(dataDict, mapList, valueOnError=None):
     try:
@@ -13,7 +10,7 @@ def getFromDict(dataDict, mapList, valueOnError=None):
 
 
 def makeHuman(value, addBytes=False, base=1000, decimals=1):
-    if not options['human']:
+    if not Config['human']:
         return f"{value}{' bytes' if addBytes else ''}"
 
     units = {
@@ -70,13 +67,13 @@ def message(target, msg, msgtype="", color='\x1b[0m', ret=True):
     frames = inspect.stack()
 
     try:
-        if not options['no-colors']:
+        if not Config['no-colors']:
             target.write(color)
 
         prefix = f"% {frames[2][3]}()" if msgtype in ["debug", "verbose"] else msgtype
         target.write(f"{prefix}:\x1b[0m {msg}\n")
 
-        if not options['no-colors']:
+        if not Config['no-colors']:
             target.write('\x1b[0m')
     finally:
         del frames
@@ -106,7 +103,7 @@ def error(msg, code=None, ret=False):
 def warning(msg, ret=False):
     ''' Print warning message'''
 
-    if options['quiet']:
+    if Config['quiet']:
         return ret
 
     return message(sys.stdout, msg, "warning", color="\x1b[96m", ret=ret)
@@ -115,7 +112,7 @@ def warning(msg, ret=False):
 def verbose(msg, ret=True):
     ''' Print verbose text '''
 
-    if not options['verbose']:
+    if not Config['verbose']:
         return ret
 
     return message(sys.stdout, msg, "verbose", '\x1b[33m', ret=ret)
@@ -124,7 +121,7 @@ def verbose(msg, ret=True):
 def debug(msg, force=False, ret=True):
     ''' Print debug message'''
 
-    if not options['debug'] and not force:
+    if not Config['debug'] and not force:
         return ret
 
     return message(sys.stdout, msg, "debug", '\x1b[32m', ret=ret)

@@ -5,14 +5,14 @@ import simplejson
 
 from lxml import etree
 from .common import error, verbose, debug, warning
+from .config import Config
 
 class DAVRequest():
     """ WebDAV request class for WebDAV-enabled servers """
 
     SUCCESS = [200, 201, 204, 207]
 
-    def __init__(self, options={}):
-        self.options = options
+    def __init__(self):
         self.result = None
         self.request = None
         self.response = None
@@ -23,12 +23,12 @@ class DAVRequest():
     def run(self, method, path, expectedStatus=SUCCESS, **kwargs):
         verbose(f"Request data: {data[:1000] if isinstance(data := kwargs.get('data', None), str) else type(data)}")
 
-        if self.options['head']:
+        if Config['head']:
             method = "HEAD"
 
         # construct url
-        url = f"{self.options['credentials']['hostname']}{self.options['credentials']['endpoint']}"
-        if not self.options['no-path']:
+        url = f"{Config['credentials']['hostname']}{Config['credentials']['endpoint']}"
+        if not Config['no-path']:
             url += path
 
         # construct request
@@ -40,17 +40,17 @@ class DAVRequest():
         verbose(f"Request headers: {self.request.headers}")
 
         # exit if dry-run
-        if self.options['dry-run']:
+        if Config['dry-run']:
             warning(f"dry-run: {method.upper()} {req.url}")
             return False
 
         # some debug messages
-        verbose(f"Options: {self.options}")
+        verbose(f"Options: {Config}")
         debug(f"{method.upper()} {self.request.url}")
 
         # do request
         try:
-            self.response = self.session.send(self.request, verify=not self.options['no-verify'], timeout=self.options['timeout'])
+            self.response = self.session.send(self.request, verify=not Config['no-verify'], timeout=Config['timeout'])
         except requests.exceptions.ReadTimeout:
             error("request time out after 30 seconds", 2)
         except requests.exceptions.SSLError as e:
@@ -61,9 +61,9 @@ class DAVRequest():
             self.response.encoding = cchardet.detect(self.response.content)['encoding']
 
         # print headers, exit if only head request
-        if self.options['headers'] or self.options['head']:
+        if Config['headers'] or Config['head']:
             debug(f"Response headers: {self.response.headers}", True)
-            if self.options['head']:
+            if Config['head']:
                 return False
 
         debug(f"Response: {self.response.status_code} {self.response.reason}")
@@ -94,7 +94,7 @@ class DAVRequest():
                     }
 
         # parse based on given content type
-        if 'Content-Type' in self.response.headers and not self.options['no-parse']:
+        if 'Content-Type' in self.response.headers and not Config['no-parse']:
             info = self.response.headers['Content-Type'].split(';')
             if info[0] in ['application/xml', 'text/xml']:
                 try:
@@ -128,5 +128,5 @@ class DAVRequest():
 class DAVAuthRequest(DAVRequest):
     def run(self, method, path, expectedStatus=DAVRequest.SUCCESS, **kwargs):
         return DAVRequest.run(self, method, path, expectedStatus=expectedStatus,
-                              auth=(self.options["credentials"]["user"], self.options["credentials"]["token"]) if 'Authorization' not in kwargs.get('headers', {}) else None,
+                              auth=(Config["credentials"]["user"], Config["credentials"]["token"]) if 'Authorization' not in kwargs.get('headers', {}) else None,
                               **kwargs)
