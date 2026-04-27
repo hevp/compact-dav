@@ -6,7 +6,7 @@ import sys
 import simplejson
 
 from .client import WebDAVClient
-from .common import error, note
+from .common import configure_logging, error, debug
 from .config import Config
 
 def _load_api(path: str | None = None) -> dict:
@@ -146,6 +146,7 @@ def main(argv: list[str] | None = None) -> None:
     }
 
     Config.set(ns, defaults)
+    configure_logging()
     wd = WebDAVClient()
 
     if not wd.setargs(ns.operation, _positional_args(ns)) or \
@@ -163,7 +164,7 @@ def main(argv: list[str] | None = None) -> None:
 
     if res and wd.request.hassuccess():
         if wd.results is None or isinstance(wd.results, bool):
-            note(f"{ns.operation} successful")
+            debug(f"{ns.operation} successful")
         else:
             sys.stdout.write(wd.format())
             sys.stdout.flush()
