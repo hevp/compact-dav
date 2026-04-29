@@ -4,8 +4,9 @@ import requests
 import simplejson
 
 from lxml import etree
-from .common import error, verbose, debug, warning
 from .config import Config
+from .logger import error, verbose, debug, warning
+
 
 class DAVRequest():
     """ WebDAV request class for WebDAV-enabled servers """

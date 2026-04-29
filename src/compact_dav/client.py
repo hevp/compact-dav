@@ -7,9 +7,10 @@ import simplejson
 from lxml import etree
 from urllib3.exceptions import InsecureRequestWarning
 
-from .common import error, debug, verbose, getValueByTagReference, listToDict, relativePath
+from .common import getValueByTagReference, listToDict, relativePath
 from .config import Config
 from .generator import GeneratorFactory
+from .logger import error, debug, verbose
 from .parser import ParserFactory
 from .request import DAVAuthRequest, DAVRequest
 

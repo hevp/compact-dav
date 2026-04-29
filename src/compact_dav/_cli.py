@@ -6,8 +6,8 @@ import sys
 import simplejson
 
 from .client import WebDAVClient
-from .common import error, debug, _Logger
 from .config import Config
+from .logger import Logger, error, debug
 
 def _load_api(path: str | None = None) -> dict:
     try:
@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> None:
     }
 
     Config.set(ns, defaults)
-    _Logger.init()
+    Logger.init()
     wd = WebDAVClient()
 
     if not wd.setargs(ns.operation, _positional_args(ns)) or \

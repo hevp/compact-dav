@@ -3,7 +3,8 @@
 """
 
 from lxml import etree
-from .common import error, getValueByTagReference
+from .common import getValueByTagReference
+from .logger import error
 
 
 class GeneratorFactory():
