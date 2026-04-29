@@ -29,11 +29,7 @@ def _load_credentials_data(path: str) -> dict:
     except FileNotFoundError:
         return {"active": None, "remotes": {}}
     except Exception as e:
-        print(f"error: failed to read {path}: {e}", file=sys.stderr)
-        sys.exit(1)
-    # Migrate old flat format
-    if "remotes" not in data:
-        return {"active": "default", "remotes": {"default": data}}
+        error(f"failed to read {path}: {e}", 1)
     return data
 
 
@@ -42,17 +38,17 @@ def _save_credentials(path: str, data: dict) -> None:
         with open(os.path.abspath(path), "w") as f:
             simplejson.dump(data, f, indent=4)
     except Exception as e:
-        print(f"error: failed to save {path}: {e}", file=sys.stderr)
-        sys.exit(1)
+        error(f"failed to save {path}: {e}", 1)
 
 
 def _run_config(credentials_file: str, name: str | None, use: str | None) -> None:
     data = _load_credentials_data(credentials_file)
+    if "remotes" not in data:
+        data = {"active": "default", "remotes": {"default": data}}
 
     if use is not None:
         if use not in data["remotes"]:
-            print(f"error: credential set '{use}' not found", file=sys.stderr)
-            sys.exit(1)
+            error(f"credential set '{use}' not found", 1)
         data["active"] = use
         _save_credentials(credentials_file, data)
         print(f"Active credential set: '{use}'")
@@ -66,8 +62,7 @@ def _run_config(credentials_file: str, name: str | None, use: str | None) -> Non
         entered = input(prompt).strip()
         name = entered if entered else default
         if not name:
-            print("error: a name is required", file=sys.stderr)
-            sys.exit(1)
+            error("a name is required", 1)
 
     existing = data["remotes"].get(name, {})
     action = "Creating" if name not in data["remotes"] else "Editing"
@@ -214,6 +209,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = _build_parser(api)
     ns = parser.parse_args(argv)
 
+    Logger.init()
+
     if ns.operation == "config":
         _run_config(ns.credentials_file, ns.name, ns.use)
         return
@@ -232,7 +229,6 @@ def main(argv: list[str] | None = None) -> None:
     }
 
     Config.set(ns, defaults)
-    Logger.init()
     wd = WebDAVClient()
 
     if not wd.setargs(ns.operation, _positional_args(ns)) or \
@@ -245,8 +241,7 @@ def main(argv: list[str] | None = None) -> None:
         try:
             res = wd.run()
         except Exception as e:
-            print(f"error: {e}", file=sys.stderr)
-            sys.exit(1)
+            error(f"{e}", 1)
 
     if res and wd.request.hassuccess():
         if wd.results is None or isinstance(wd.results, bool):

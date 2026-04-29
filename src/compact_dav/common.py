@@ -3,6 +3,7 @@ import re
 import sys
 import urllib
 
+from .logger import warning
 from .config import Config
 
 
