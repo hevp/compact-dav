@@ -53,7 +53,7 @@ class DAVRequest():
             self.response = self.session.send(self.request, verify=not Config['no-verify'], timeout=Config['timeout'])
         except requests.exceptions.ReadTimeout:
             error("request time out after 30 seconds", 2)
-        except requests.exceptions.SSLError as e:
+        except Exception as e:
             error(e, 2)
 
         # determine the encoding of the response text
