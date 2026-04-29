@@ -2,6 +2,7 @@
 """Compact OwnCloud/NextCloud WebDAV client"""
 
 import argparse
+import os
 import sys
 import simplejson
 
@@ -19,6 +20,81 @@ def _load_api(path: str | None = None) -> dict:
             return simplejson.load(f)
     except Exception as e:
         error(f"api load failed: {e}", 1)
+
+
+def _load_credentials_data(path: str) -> dict:
+    try:
+        with open(os.path.abspath(path)) as f:
+            data = simplejson.load(f)
+    except FileNotFoundError:
+        return {"active": None, "remotes": {}}
+    except Exception as e:
+        print(f"error: failed to read {path}: {e}", file=sys.stderr)
+        sys.exit(1)
+    # Migrate old flat format
+    if "remotes" not in data:
+        return {"active": "default", "remotes": {"default": data}}
+    return data
+
+
+def _save_credentials(path: str, data: dict) -> None:
+    try:
+        with open(os.path.abspath(path), "w") as f:
+            simplejson.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"error: failed to save {path}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _run_config(credentials_file: str, name: str | None, use: str | None) -> None:
+    data = _load_credentials_data(credentials_file)
+
+    if use is not None:
+        if use not in data["remotes"]:
+            print(f"error: credential set '{use}' not found", file=sys.stderr)
+            sys.exit(1)
+        data["active"] = use
+        _save_credentials(credentials_file, data)
+        print(f"Active credential set: '{use}'")
+        return
+
+    # Resolve name interactively if not given as argument
+    if name is None:
+        existing_names = list(data["remotes"].keys())
+        default = data.get("active") or (existing_names[0] if existing_names else None)
+        prompt = f"  Name [{default}]: " if default else "  Name: "
+        entered = input(prompt).strip()
+        name = entered if entered else default
+        if not name:
+            print("error: a name is required", file=sys.stderr)
+            sys.exit(1)
+
+    existing = data["remotes"].get(name, {})
+    action = "Creating" if name not in data["remotes"] else "Editing"
+    print(f"{action} credential set '{name}' ({credentials_file}). Press Enter to keep existing value.")
+
+    fields = [
+        ("hostname", "Hostname", False),
+        ("endpoint", "Endpoint", False),
+        ("user",     "User",     False),
+        ("token",    "Token",    True),
+    ]
+
+    result = {}
+    for key, label, secret in fields:
+        current = existing.get(key, "")
+        display = "****" if secret and current else current
+        prompt = f"  {label} [{display}]: " if display else f"  {label}: "
+        value = input(prompt).strip()
+        result[key] = value if value else current
+
+    data["remotes"][name] = result
+    if not data.get("active"):
+        data["active"] = name
+
+    _save_credentials(credentials_file, data)
+    active_note = " (active)" if data["active"] == name else ""
+    print(f"Credential set '{name}'{active_note} saved to {credentials_file}")
 
 
 def _build_parser(api: dict) -> argparse.ArgumentParser:
@@ -83,6 +159,12 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
     )
     subs.required = True
 
+    config_sp = subs.add_parser("config", help="Set up WebDAV remote credentials interactively")
+    config_sp.add_argument("name", nargs="?", default=None, metavar="NAME",
+                           help="credential set name to create or edit")
+    config_sp.add_argument("--use", metavar="NAME",
+                           help="switch the active credential set to NAME")
+
     for op, ov in api.items():
         argdefs = ov.get("arguments", {"min": 1, "max": 1})
         descs = ov.get("descriptions", {})
@@ -131,6 +213,10 @@ def main(argv: list[str] | None = None) -> None:
     api = _load_api(pre_ns.api)
     parser = _build_parser(api)
     ns = parser.parse_args(argv)
+
+    if ns.operation == "config":
+        _run_config(ns.credentials_file, ns.name, ns.use)
+        return
 
     defaults: dict = {
         "api": None,

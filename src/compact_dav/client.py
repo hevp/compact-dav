@@ -93,10 +93,20 @@ class WebDAVClient():
     def credentials(self, filename):
         try:
             with open(os.path.abspath(filename), "r") as f:
-                text = f.read()
-            Config["credentials"] = simplejson.loads(text)
+                data = simplejson.loads(f.read())
         except Exception as e:
             error(f"credentials loading failed: {e}", 1)
+
+        # Multi-remote format: extract the active credential set
+        if "remotes" in data:
+            active = data.get("active")
+            if not active:
+                error("no active credential set; use `dav config --use NAME` to select one", 1)
+            if active not in data["remotes"]:
+                error(f"active credential set '{active}' not found in {filename}", 1)
+            Config["credentials"] = data["remotes"][active]
+        else:
+            Config["credentials"] = data
 
         debug(f"credentials file '{filename}'")
 
