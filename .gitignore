@@ -2,7 +2,6 @@
 *.pyc
 __pycache__
 .python-version
-HISTORY.md
 
 .vscode/
 
@@ -12,10 +11,4 @@ dist/
 build/
 
 # virtual environments
-venv/
 .venv/
-
-# keep these
-!requirements.txt
-!credentials.stub.json
-!webdav.json
