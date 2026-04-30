@@ -6,6 +6,8 @@ import os
 import sys
 import simplejson
 
+_DEFAULT_CREDENTIALS = os.path.join(os.path.expanduser("~"), ".config", "compact-dav", "credentials.json")
+
 from .client import WebDAVClient
 from .config import Config
 from .logger import Logger, error, debug
@@ -103,7 +105,7 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
     infra = parser.add_argument_group("infrastructure")
     infra.add_argument("--api", default=None, metavar="FILE",
                        help="API definition file (default: bundled webdav.json)")
-    infra.add_argument("--credentials-file", "-c", default="credentials.json", metavar="FILE",
+    infra.add_argument("--credentials-file", "-c", default=_DEFAULT_CREDENTIALS, metavar="FILE",
                        help="Credentials JSON file (default: %(default)s)")
 
     out = parser.add_argument_group("output")
@@ -217,7 +219,7 @@ def main(argv: list[str] | None = None) -> None:
 
     defaults: dict = {
         "api": None,
-        "credentials-file": "credentials.json",
+        "credentials-file": _DEFAULT_CREDENTIALS,
         "printf": "{date} {size:r} {path}",
         "timeout": 30,
         **{k: False for k in [

@@ -6,9 +6,6 @@ HISTORY.md
 
 .vscode/
 
-# user credentials (never commit real credentials)
-credentials.json
-
 # packaging build artefacts
 *.egg-info/
 dist/
