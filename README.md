@@ -5,19 +5,25 @@ A simple and compact WebDAV client written in Python 3.
 - All WebDAV operations supported
 - Flexible listing, with optional recursion
 - Proper error reporting
-- Flexible instance targetting
+- Flexible instance targeting
 
 ### Requirements
-- Python 3.6+
+- Python 3.12+
 - Various packages, including `requests`
 
 ### Installation
-Optionally, create a separate virtual environment and activate it.
-
-Install the packages using the `requirements.txt` file:
+To install the repository as a package run
 
 ```sh
-pip3 install -r requirements
+pip3 install -e .
+```
+
+Optionally, create a separate virtual environment and activate it.
+
+Install the required packages using the `requirements.txt` file:
+
+```sh
+pip3 install -r requirements.txt
 ```
 
 ### Configuration
@@ -37,10 +43,12 @@ You can find the endpoint and credentials in the settings of your WebDAV install
 A stub configuration file is provided as `credentials.stub.json`. Copy it and fill in your values.
 
 ### How to run
+In the following examples it is assumed the package is installed on the system.
+
 General syntax:
 
 ```sh
-dav.py <operation> [options] <source> [target]
+dav <operation> [options] <source> [target]
 ```
 
 where `operation` is one of the valid operations available, `source` is the path to process and the optional `target` is the target path.
@@ -48,7 +56,7 @@ where `operation` is one of the valid operations available, `source` is the path
 The optional `options` can be found through:
 
 ```sh
-dav.py --help
+dav --help
 ```
 
 This list all available operations and options.
@@ -56,60 +64,60 @@ This list all available operations and options.
 You can find more detailed information per operation through:
 
 ```sh
-dav.py <operation> --help
+dav <operation> --help
 ```
 
 ### Examples
 - List contents of your root folder:
 
 ```sh
-dav.py list /
+dav list /
 ```
 
 - List contents of your folder 'my/excellent/folder', display subfolders first, show a summary at the end, sort alphabetically, show human-readable sizes:
 
 ```sh
-dav.py list my/excellent/folder -tuh --sort
+dav list my/excellent/folder -tuh --sort
 ```
 
 - Create a folder 'folder' in root:
 
 ```sh
-dav.py mkcol folder
+dav mkcol folder
 ```
 
 - Delete a folder 'folder' and auto-confirm:
 
 ```sh
-dav.py delete folder -y
+dav delete folder -y
 ```
 
 - Rename a file `test.dat` stored in a folder `test` to `test.txt`:
 
 ```sh
-dav.py move test/test.dat test/test.txt
+dav move test/test.dat test/test.txt
 ```
 
 - Move a file `wrong.dat` stored in a folder `data` to the root folder and rename it to `right.dat`:
 
 ```sh
-dav.py move data/wrong.dat /right.dat
+dav move data/wrong.dat /right.dat
 ```
 
 - Copy a file `test.dat` stored in a folder `test` to `test.txt`:
 
 ```sh
-dav.py copy test/test.dat test/test.txt
+dav copy test/test.dat test/test.txt
 ```
 
 - Download a file `test/test.txt`
 
 ```sh
-dav.py download test/test.txt
+dav download test/test.txt
 ```
 
 - Upload a file `test.txt` to folder `test`:
 
 ```sh
-dav.py upload test/test.txt test.txt
+dav upload test/test.txt test.txt
 ```
