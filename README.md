@@ -40,7 +40,17 @@ You need a configuration file in JSON format in order to allow the client to con
 
 You can find the endpoint and credentials in the settings of your WebDAV installation, e.g. OwnCloud or NextCloud.
 
-A stub configuration file is provided as `credentials.stub.json`. Copy it and fill in your values.
+Use the `config` which will guide you through the process of adding a specific configuration. Multiple configurations are supported.
+
+```sh
+dav config
+```
+
+To switch to a different configuration, use:
+
+```sh
+dav config --use <name>
+```
 
 ### How to run
 In the following examples it is assumed the package is installed on the system.
