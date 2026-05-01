@@ -13,7 +13,7 @@ class DAVRequest():
 
     SUCCESS = [200, 201, 204, 207]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.result = None
         self.request = None
         self.response = None
@@ -21,7 +21,7 @@ class DAVRequest():
         self.success = False
         self.session = requests.Session()
 
-    def run(self, method, path, expectedStatus=SUCCESS, **kwargs):
+    def run(self, method: str, path: str, expectedStatus: list[int] = SUCCESS, **kwargs: object) -> object:
         verbose(f"Request data: {data[:1000] if isinstance(data := kwargs.get('data', None), str) else type(data)}")
 
         if Config['head']:
@@ -112,10 +112,10 @@ class DAVRequest():
 
         return self.result
 
-    def hassuccess(self):
+    def hassuccess(self) -> bool:
         return self.response is not None and self.response.status_code in DAVRequest.SUCCESS
 
-    def _requestfail(self):
+    def _requestfail(self) -> bool:
         message = ""
         if self.response.status_code >= 400 and self.response.status_code < 500:
             if isinstance(self.result, etree._Element):
@@ -127,7 +127,7 @@ class DAVRequest():
 
 
 class DAVAuthRequest(DAVRequest):
-    def run(self, method, path, expectedStatus=DAVRequest.SUCCESS, **kwargs):
+    def run(self, method: str, path: str, expectedStatus: list[int] = DAVRequest.SUCCESS, **kwargs: object) -> object:
         return DAVRequest.run(self, method, path, expectedStatus=expectedStatus,
                               auth=(Config["credentials"]["user"], Config["credentials"]["token"]) if 'Authorization' not in kwargs.get('headers', {}) else None,
                               **kwargs)

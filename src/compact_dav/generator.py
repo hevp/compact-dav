@@ -9,29 +9,29 @@ from .logger import error
 
 class GeneratorFactory():
     @staticmethod
-    def getGenerator(data, options):
+    def getGenerator(data: dict, options: dict) -> "XMLGenerator":
         return XMLGenerator(options)
 
 
 class Generator():
-    def __init__(self, data):
+    def __init__(self, data: dict) -> None:
         self.data = data
 
-    def getContentType(self):
+    def getContentType(self) -> str:
         return 'text/plain'
 
 
 class XMLGenerator(Generator):
-    def getContentType(self):
+    def getContentType(self) -> str:
         return 'application/xml'
 
-    def _getXMLTag(self, tag, nsmap):
+    def _getXMLTag(self, tag: str, nsmap: dict[str, str]) -> str:
         if ':' in tag:
             tags = tag.split(':')
             tag = "{%s}%s" % (nsmap[tags[0]], tags[1])
         return tag
 
-    def generate(self, data, element=None):
+    def generate(self, data: dict, element: etree._Element | None = None) -> str:
         NSMAP = {"d": "DAV:", "oc": "http://owncloud.org/ns", "nc": "http://nextcloud.org/ns"}
 
         try:

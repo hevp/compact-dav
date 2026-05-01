@@ -13,7 +13,7 @@ from .common import makeHuman, relativePath
 
 class ParserFactory():
     @staticmethod
-    def getParser(p, data, options):
+    def getParser(p: dict, data: object, options: dict) -> "Parser":
         if p.get('scope', '') == 'headers':
             parser = HeadersParser(p, options)
         elif p.get('scope', '') == 'response':
@@ -33,34 +33,34 @@ class ParserFactory():
 
 
 class Parser(dict):
-    def __init__(self, defs, options={}, resultInit=None):
+    def __init__(self, defs: dict, options: dict = {}, resultInit: object = None) -> None:
         self.update(defs)
         self.options = options
         self._result = resultInit
 
-    def _pre(self, data):
+    def _pre(self, data: object) -> None:
         pass
 
-    def _parse(self, data):
+    def _parse(self, data: object) -> None:
         pass
 
-    def _post(self, data):
+    def _post(self, data: object) -> None:
         pass
 
-    def run(self, data):
+    def run(self, data: object) -> "Parser":
         self._pre(data)
         self._parse(data)
         self._post(data)
 
         return self
 
-    def result(self):
+    def result(self) -> object:
         return self._result
 
-    def filter(self):
+    def filter(self) -> None:
         pass
 
-    def format(self):
+    def format(self) -> object:
         return copy.deepcopy(self._result)
 
 
@@ -73,10 +73,10 @@ class ResponseParser(Parser):
 
 
 class XMLResponseParser(ResponseParser):
-    def __init__(self, data, options={}):
+    def __init__(self, data: dict, options: dict = {}) -> None:
         super().__init__(data, options, [])
 
-    def _parse(self, data):
+    def _parse(self, data: etree._Element) -> None:
         super()._parse(data)
         # get XML namespace map, excluding default namespace
         nsmap = {k: v for k, v in data.nsmap.items() if k}
@@ -121,7 +121,7 @@ class XMLResponseParser(ResponseParser):
             # add to results
             self._result.append(variables)
 
-    def _post(self, data):
+    def _post(self, data: etree._Element) -> None:
         # apply sorting etc
         if self.options['sort'] and self.options['dirs-first']:
             self._result.sort(key=lambda x: x['type'] + x['path'].lower(), reverse=self.options['reverse'])
@@ -135,7 +135,7 @@ class XMLResponseParser(ResponseParser):
 
 
 class ListXMLResponseParser(XMLResponseParser):
-    def _post(self, data):
+    def _post(self, data: etree._Element) -> None:
         super()._post(data)
 
         # filtering
@@ -147,7 +147,7 @@ class ListXMLResponseParser(XMLResponseParser):
         elif self.options['files-only']:
             self._result = [x for x in self._result if x['type'] == 'f']
 
-    def format(self):
+    def format(self) -> str:
         printResult = ""
         printf = self.options.get("printf", "")
 
@@ -219,7 +219,7 @@ class ListXMLResponseParser(XMLResponseParser):
 
         return printResult
 
-    def format_summary(self):
+    def format_summary(self) -> str:
         # filter out any directory if recursive
         res = copy.deepcopy(self._result) if not self.options['recursive'] else [x for x in self._result if x['type'] != "d"]
 

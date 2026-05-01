@@ -20,7 +20,7 @@ class Logger:
     _out_handler: logging.StreamHandler
 
     class _Formatter(logging.Formatter):
-        def format(self, record):
+        def format(self, record: logging.LogRecord) -> str:
             color = Logger._COLORS.get(record.levelno, '\x1b[0m')
             label = Logger._LABELS.get(
                 record.levelno,
@@ -32,7 +32,7 @@ class Logger:
             return f"{color}{label}:\x1b[0m {msg}"
 
     @classmethod
-    def init(cls):
+    def init(cls) -> None:
         cls._logger = logging.getLogger("compact_dav")
         cls._logger.propagate = False
 
@@ -52,7 +52,7 @@ class Logger:
         cls._logger.setLevel(logging.DEBUG)
 
     @classmethod
-    def configure(cls):
+    def configure(cls) -> None:
         if Config.get('debug', False):
             level = logging.DEBUG
         elif Config.get('quiet', False):
@@ -62,27 +62,27 @@ class Logger:
         cls._out_handler.setLevel(level)
 
     @classmethod
-    def log(cls, level, msg, ret=True, **kwargs):
+    def log(cls, level: int, msg: object, ret: bool = True, **kwargs: object) -> bool:
         cls._logger.log(level, msg, stacklevel=3, **kwargs)
         return ret
 
 
-def error(msg, code=None, ret=False):
+def error(msg: object, code: int | None = None, ret: bool = False) -> bool:
     Logger.log(logging.ERROR, msg)
     if code is not None:
         sys.exit(code)
     return ret
 
 
-def warning(msg, ret=False):
+def warning(msg: object, ret: bool = False) -> bool:
     return Logger.log(logging.WARNING, msg, ret)
 
 
-def verbose(msg, ret=True):
+def verbose(msg: object, ret: bool = True) -> bool:
     if Config.get('verbose', False):
         Logger.log(logging.INFO, msg, extra={'label': 'verbose'})
     return ret
 
 
-def debug(msg, force=False, ret=True):
+def debug(msg: object, force: bool = False, ret: bool = True) -> bool:
     return Logger.log(logging.INFO if force else logging.DEBUG, msg, ret)

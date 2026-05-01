@@ -7,14 +7,14 @@ from .logger import warning
 from .config import Config
 
 
-def getFromDict(dataDict, mapList, valueOnError=None):
+def getFromDict(dataDict: dict, mapList: list, valueOnError: object = None) -> object:
     try:
         return functools.reduce(lambda d, k: d[k], mapList, dataDict)
     except Exception:
         return valueOnError
 
 
-def makeHuman(value, addBytes=False, base=1000, decimals=1):
+def makeHuman(value: int | float, addBytes: bool = False, base: int = 1000, decimals: int = 1) -> str:
     if not Config['human']:
         return f"{value}{' bytes' if addBytes else ''}"
 
@@ -32,7 +32,7 @@ def makeHuman(value, addBytes=False, base=1000, decimals=1):
     return f"{display!s:.3} {units[base][i - 1]}"
 
 
-def relativePath(r, var, root, endpoint):
+def relativePath(r: dict[str, object], var: str, root: str, endpoint: str) -> str:
     val = r[var].replace(endpoint, "")
     val = val.replace(root, "", 1)
     val = urllib.parse.unquote(val)
@@ -46,11 +46,11 @@ def relativePath(r, var, root, endpoint):
     return val
 
 
-def listToDict(*args):
+def listToDict(*args: list) -> dict[str, object]:
     return dict(zip(map(str, range(len(*args))), *args))
 
 
-def getValueByTagReference(v, *args):
+def getValueByTagReference(v: str, *args: dict) -> str:
     for m in re.findall(r'@([0-9]+)|@{([\w\.\-]+)}', v):
         rv = m[1] if m[1] > '' else m[0]
         rs = f"@{{{m[1]}}}" if m[1] > '' else f"@{m[0]}"

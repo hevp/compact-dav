@@ -17,7 +17,7 @@ from .request import DAVAuthRequest, DAVRequest
 class ChunkedFile():
     """ Chunked file upload class to be used with requests package """
 
-    def __init__(self, filename, chunksize=1024*1024*10):
+    def __init__(self, filename: str, chunksize: int = 1024*1024*10) -> None:
         self.chunksize = chunksize
         try:
             self.obj = open(filename, 'rb')
@@ -32,14 +32,14 @@ class ChunkedFile():
         except Exception as e:
             error(e, 3)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.size
 
 
 class WebDAVClient():
     """ WebDAV client class to set up requests for WebDAV-enabled servers """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.args = {}
         self.results = None
         self.headers = {}
@@ -47,7 +47,7 @@ class WebDAVClient():
 
         self._loadapi()
 
-    def _loadapi(self):
+    def _loadapi(self) -> None:
         # load API definition
         try:
             api_path = Config['api']
@@ -90,7 +90,7 @@ class WebDAVClient():
         except Exception as e:
             error(f"api load failed: {e}", 1)
 
-    def credentials(self, filename):
+    def credentials(self, filename: str) -> bool:
         try:
             with open(os.path.abspath(filename), "r") as f:
                 data = simplejson.loads(f.read())
@@ -125,7 +125,7 @@ class WebDAVClient():
 
         return True
 
-    def setargs(self, operation, args):
+    def setargs(self, operation: str, args: list[str]) -> bool:
         # check if valid operation
         if operation not in self.api.keys():
             error(f"unknown operation '{operation}'", 1)
@@ -158,7 +158,7 @@ class WebDAVClient():
 
         return True
 
-    def run(self):
+    def run(self) -> bool:
         """ Perform one of supported actions """
 
         # disable requests warning if quiet and verification off
@@ -214,14 +214,14 @@ class WebDAVClient():
 
         return True
 
-    def setHeader(self, tag, value):
+    def setHeader(self, tag: str, value: str | dict) -> None:
         if type(value) is dict:
             # conditional headers to be implemented
             pass
         else:
             self.headers[tag] = getValueByTagReference(value, listToDict(self.args))
 
-    def doRequest(self):
+    def doRequest(self) -> object:
         self.request = DAVAuthRequest()
 
         # set request headers if required
@@ -271,7 +271,7 @@ class WebDAVClient():
 
         return results
 
-    def exists(self):
+    def exists(self) -> bool:
         if "exists" not in self.defs["options"] or not self.defs["options"]["exists"]:
             return True
 
@@ -297,7 +297,7 @@ class WebDAVClient():
 
         return True
 
-    def confirm(self):
+    def confirm(self) -> bool:
         if "confirm" not in self.defs["options"] or not self.defs["options"]["confirm"]:
             return True
 
@@ -318,10 +318,10 @@ class WebDAVClient():
 
         return True
 
-    def parse(self, data, options):
+    def parse(self, data: object, options: dict) -> list:
         return [ParserFactory.getParser(p, data, options) for p in self.defs.get('parsing', [])]
 
-    def format(self):
+    def format(self) -> str:
         """ Format the result of the request """
 
         if Config['human']:

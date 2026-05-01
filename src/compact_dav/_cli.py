@@ -12,7 +12,7 @@ from .client import WebDAVClient
 from .config import Config
 from .logger import Logger, error, debug
 
-def _load_api(path: str | None = None) -> dict:
+def _load_api(path: str | None = None) -> dict[str, dict]:
     try:
         if path:
             with open(path) as f:
@@ -24,7 +24,7 @@ def _load_api(path: str | None = None) -> dict:
         error(f"api load failed: {e}", 1)
 
 
-def _load_credentials_data(path: str) -> dict:
+def _load_credentials_data(path: str) -> dict[str, str | dict]:
     try:
         with open(os.path.abspath(path)) as f:
             data = simplejson.load(f)
@@ -35,7 +35,7 @@ def _load_credentials_data(path: str) -> dict:
     return data
 
 
-def _save_credentials(path: str, data: dict) -> None:
+def _save_credentials(path: str, data: dict[str, str | dict]) -> None:
     try:
         with open(os.path.abspath(path), "w") as f:
             simplejson.dump(data, f, indent=4)
@@ -146,7 +146,7 @@ def _build_global_options() -> argparse.ArgumentParser:
     return common
 
 
-def _build_parser(api: dict) -> argparse.ArgumentParser:
+def _build_parser(api: dict[str, dict]) -> argparse.ArgumentParser:
     common = _build_global_options()
     _global_flags = {a.dest.replace("_", "-") for a in common._actions}
 
@@ -278,6 +278,7 @@ def main(argv: list[str] | None = None) -> None:
     }
 
     Config.set(ns, defaults)
+    Logger.configure()
     wd = WebDAVClient()
 
     if not wd.setargs(ns.operation, _positional_args(ns)) or \
