@@ -94,21 +94,16 @@ def _run_config(credentials_file: str, name: str | None, use: str | None) -> Non
     print(f"Credential set '{name}'{active_note} saved to {credentials_file}")
 
 
-def _build_parser(api: dict) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="dav",
-        description="CompactDAV — OwnCloud/NextCloud WebDAV client",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument("--version", action="version", version="CompactDAV 1.2")
+def _build_global_options() -> argparse.ArgumentParser:
+    common = argparse.ArgumentParser(add_help=False)
 
-    infra = parser.add_argument_group("infrastructure")
+    infra = common.add_argument_group("infrastructure")
     infra.add_argument("--api", default=None, metavar="FILE",
                        help="API definition file (default: bundled webdav.json)")
     infra.add_argument("--credentials-file", "-c", default=_DEFAULT_CREDENTIALS, metavar="FILE",
                        help="Credentials JSON file (default: %(default)s)")
 
-    out = parser.add_argument_group("output")
+    out = common.add_argument_group("output")
     out.add_argument("--printf", "-p", default="{date} {size:r} {path}", metavar="FORMAT",
                      help="Output format string (default: %(default)r)")
     # Note: -h is reserved by argparse for --help; original used -h for --human
@@ -121,7 +116,7 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
     out.add_argument("--debug", action="store_true", help="Debug output")
     out.add_argument("--quiet", "-q", action="store_true", help="Suppress non-error output")
 
-    req = parser.add_argument_group("request")
+    req = common.add_argument_group("request")
     req.add_argument("--dry-run", "-n", action="store_true",
                      help="Print the request without executing it")
     req.add_argument("--no-verify", "-k", action="store_true",
@@ -138,7 +133,7 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
     req.add_argument("--headers", action="store_true", help="Print response headers")
     req.add_argument("--head", action="store_true", help="Issue a HEAD request only")
 
-    flt = parser.add_argument_group("listing and filtering")
+    flt = common.add_argument_group("listing and filtering")
     flt.add_argument("--recursive", "-R", action="store_true", help="Recurse into subdirectories")
     flt.add_argument("--sort", action="store_true", help="Sort results by path")
     flt.add_argument("--reverse", "-r", action="store_true", help="Reverse sort order")
@@ -148,6 +143,21 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
     flt.add_argument("--list-empty", "-e", action="store_true", help="Show only empty directories")
     flt.add_argument("--no-path", action="store_true", help="Omit paths from output")
 
+    return common
+
+
+def _build_parser(api: dict) -> argparse.ArgumentParser:
+    common = _build_global_options()
+    _global_flags = {a.dest.replace("_", "-") for a in common._actions}
+
+    parser = argparse.ArgumentParser(
+        prog="dav",
+        description="CompactDAV — OwnCloud/NextCloud WebDAV client",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        parents=[common],
+    )
+    parser.add_argument("--version", action="version", version="CompactDAV 1.2")
+
     subs = parser.add_subparsers(
         dest="operation",
         metavar="OPERATION",
@@ -156,7 +166,8 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
     )
     subs.required = True
 
-    config_sp = subs.add_parser("config", help="Set up WebDAV remote credentials interactively")
+    config_sp = subs.add_parser("config", parents=[_build_global_options()],
+                                help="Set up WebDAV remote credentials interactively")
     config_sp.add_argument("name", nargs="?", default=None, metavar="NAME",
                            help="credential set name to create or edit")
     config_sp.add_argument("--use", metavar="NAME",
@@ -168,7 +179,8 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
         min_args = argdefs.get("min", 1)
         max_args = argdefs.get("max", 1)
 
-        sp = subs.add_parser(op, help=ov["description"],
+        sp = subs.add_parser(op, parents=[_build_global_options()],
+                             help=ov["description"],
                              formatter_class=argparse.RawDescriptionHelpFormatter)
 
         for i in range(max_args):
@@ -184,9 +196,42 @@ def _build_parser(api: dict) -> argparse.ArgumentParser:
 
         # Operation-specific flags (non-positional entries in descriptions)
         for key, desc in ((k, v) for k, v in descs.items() if not k.isdigit()):
-            sp.add_argument(f"--{key}", help=desc)
+            if key not in _global_flags:
+                sp.add_argument(f"--{key}", help=desc)
 
     return parser
+
+
+def _expand_combined_flags(argv: list[str], common: argparse.ArgumentParser) -> list[str]:
+    """Expand combined short flags like -tuH into -t -u -H.
+
+    Flags that consume a value (nargs != 0) terminate the group; any remaining
+    characters are treated as the inline value, matching POSIX convention.
+    """
+    value_flags = {
+        opt[1]
+        for action in common._actions
+        for opt in action.option_strings
+        if len(opt) == 2 and opt.startswith("-") and action.nargs != 0
+    }
+
+    result = []
+    for arg in argv:
+        if len(arg) > 2 and arg.startswith("-") and not arg.startswith("--"):
+            expanded = []
+            i = 1
+            while i < len(arg):
+                ch = arg[i]
+                expanded.append(f"-{ch}")
+                if ch in value_flags:
+                    if i + 1 < len(arg):
+                        expanded.append(arg[i + 1:])
+                    break
+                i += 1
+            result.extend(expanded)
+        else:
+            result.append(arg)
+    return result
 
 
 def _positional_args(ns: argparse.Namespace) -> list[str]:
@@ -201,6 +246,8 @@ def _positional_args(ns: argparse.Namespace) -> list[str]:
 def main(argv: list[str] | None = None) -> None:
     if argv is None:
         argv = sys.argv[1:]
+
+    argv = _expand_combined_flags(argv, _build_global_options())
 
     # Two-pass parse: resolve --api first so subparsers can be built from it
     pre = argparse.ArgumentParser(add_help=False)
