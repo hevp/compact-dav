@@ -140,12 +140,12 @@ class ListXMLResponseParser(XMLResponseParser):
 
         # filtering
         if self.options['list-empty']:
-            self._result = list(filter(lambda x: x['type'] == 'd' and x['size'] == 0, self._result))
+            self._result = [x for x in self._result if x['type'] == 'd' or x['size'] == 0]
         # filter dirs (wins) or files
         if self.options['dirs-only']:
-            self._result = list(filter(lambda x: x['type'] == 'd', self._result))
+            self._result = [x for x in self._result if x['type'] == 'd']
         elif self.options['files-only']:
-            self._result = list(filter(lambda x: x['type'] == 'f', self._result))
+            self._result = [x for x in self._result if x['type'] == 'f']
 
     def format(self):
         printResult = ""
@@ -191,7 +191,7 @@ class ListXMLResponseParser(XMLResponseParser):
             if var[1] > '' and not var[1].isdigit():
                 # determine maximum length of all elements for this variable
                 # store as string
-                lengths = list(map(lambda x: len(x[var[0]]), results))
+                lengths = [len(x[var[0]]) for x in results]
                 maxs[var[0]] = str(max(lengths)) if len(lengths) > 0 else '0'
 
         # list all elements
@@ -221,11 +221,11 @@ class ListXMLResponseParser(XMLResponseParser):
 
     def format_summary(self):
         # filter out any directory if recursive
-        res = copy.deepcopy(self._result) if not self.options['recursive'] else list(filter(lambda x: x['type'] != "d", self._result))
+        res = copy.deepcopy(self._result) if not self.options['recursive'] else [x for x in self._result if x['type'] != "d"]
 
         # get total size, directory and file counts
-        lsum = sum(map(lambda x: x['size'], res))
-        dcount = len(list(filter(lambda x: x['type'] == 'd', res)))
+        lsum = sum([x['size'] for x in res if x['type'] == 'f'])
+        dcount = len([x for x in res if x['type'] == 'd'])
         fcount = len(res) - dcount
 
         # print total size, file count if > 0, directory count if > 0

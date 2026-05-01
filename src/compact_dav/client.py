@@ -148,7 +148,7 @@ class WebDAVClient():
                     self.args.append("")
 
         # process arguments other than min, max
-        for k, v in filter(lambda x: not x[0] in ["min", "max"], self.defs["arguments"].items()):
+        for k, v in [x for x in self.defs["arguments"].items() if not x[0] in ["min", "max"]]:
             # replace reference in argument value
             self.defs["arguments"][k] = getValueByTagReference(v, listToDict(self.args))
 
@@ -319,7 +319,7 @@ class WebDAVClient():
         return True
 
     def parse(self, data, options):
-        return list(map(lambda p: ParserFactory.getParser(p, data, options), self.defs.get('parsing', [])))
+        return [ParserFactory.getParser(p, data, options) for p in self.defs.get('parsing', [])]
 
     def format(self):
         """ Format the result of the request """
