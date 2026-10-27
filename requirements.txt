@@ -1,8 +1,8 @@
-certifi==2026.4.22
-charset-normalizer==3.4.7
-idna==3.13
-logger==1.4
-lxml==6.1.0
-requests==2.33.1
-simplejson==4.1.1
-urllib3==2.7.0
+certifi>=2026.10.23
+charset-normalizer>=3.5
+idna>=3.20
+logger>=1.4
+lxml>=6.1
+requests>=2.34
+simplejson>=4.2
+urllib3>=2.8
