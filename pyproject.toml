@@ -10,11 +10,12 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
-    "faust-cchardet>=2",
-    "lxml>=4",
-    "python-dateutil>=2",
-    "requests>=2",
-    "simplejson>=3",
+    "faust-cchardet>=2.1",
+    "lxml>=6.1",
+    "python-dateutil>=2.9",
+    "requests>=2.34",
+    "simplejson>=4.2",
+    "urllib3>=2.8",
 ]
 
 [project.scripts]
